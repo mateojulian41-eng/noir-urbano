@@ -1,0 +1,15 @@
+{
+  "name": "noir-urbano",
+  "version": "1.0.0",
+  "description": "NOIR URBANO — Streetwear premium. Cartagena, Colombia.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}

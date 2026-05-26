@@ -1,0 +1,57 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/*.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "*.html",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "*.css",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "*.js",
+      "use": "@vercel/static",
+      "config": {
+        "excludeFiles": "api/**"
+      }
+    },
+    {
+      "src": "assets/**",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/wompi-checkout",
+      "dest": "/api/wompi-checkout.js",
+      "methods": ["POST"]
+    },
+    {
+      "src": "/api/wompi-transaction",
+      "dest": "/api/wompi-transaction.js",
+      "methods": ["GET"]
+    },
+    {
+      "src": "/api/wompi-webhook",
+      "dest": "/api/wompi-webhook.js",
+      "methods": ["POST"]
+    },
+    {
+      "src": "/assets/(.*)",
+      "dest": "/assets/$1"
+    },
+    {
+      "src": "/(styles\\.css|script\\.js)",
+      "dest": "/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}
