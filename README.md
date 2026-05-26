@@ -2,6 +2,8 @@
 
 Streetwear premium. Cartagena, Colombia.
 
+Deployed on Vercel.
+
 ## Estructura
 
 ```
@@ -60,14 +62,14 @@ git push -u origin main
 
 En el dashboard del proyecto → **Settings → Environment Variables**:
 
-| Variable | Valor |
-|---|---|
-| `WOMPI_ENV` | `sandbox` (o `production`) |
-| `WOMPI_PUBLIC_KEY` | Tu llave pública de Wompi |
-| `WOMPI_PRIVATE_KEY` | Tu llave privada de Wompi |
-| `WOMPI_EVENTS_SECRET` | Tu secreto de eventos Wompi |
-| `WOMPI_INTEGRITY_SECRET` | Tu secreto de integridad Wompi |
-| `WOMPI_REDIRECT_URL` | `https://TU-DOMINIO.vercel.app/?pago=wompi` |
+| Variable                 | Valor                                       |
+| ------------------------ | ------------------------------------------- |
+| `WOMPI_ENV`              | `sandbox` (o `production`)                  |
+| `WOMPI_PUBLIC_KEY`       | Tu llave pública de Wompi                   |
+| `WOMPI_PRIVATE_KEY`      | Tu llave privada de Wompi                   |
+| `WOMPI_EVENTS_SECRET`    | Tu secreto de eventos Wompi                 |
+| `WOMPI_INTEGRITY_SECRET` | Tu secreto de integridad Wompi              |
+| `WOMPI_REDIRECT_URL`     | `https://TU-DOMINIO.vercel.app/?pago=wompi` |
 
 Después de agregar las variables → **Redeploy**.
 
@@ -95,4 +97,4 @@ Las imágenes deben estar en la carpeta `assets/`. Los nombres que espera el HTM
 - `assets/product-heat-tank.jpg`
 - `assets/product-void-cargo.jpg`
 - `assets/product-dark-line.jpg`
-EOF
+  EOF
