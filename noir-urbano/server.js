@@ -9,7 +9,7 @@ const webhookHandler = require("./api/wompi-webhook");
 
 const root = __dirname;
 const port = Number(process.env.PORT || 4173);
-const host = "127.0.0.1";
+const host = "0.0.0.0";
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -52,12 +52,16 @@ function runApi(handler, req, res) {
 }
 
 async function serveStatic(req, res) {
-  let pathname = decodeURIComponent(new URL(req.url, `http://${host}`).pathname);
+  let pathname = decodeURIComponent(
+    new URL(req.url, `http://${req.headers.host || host}`).pathname,
+  );
 
   if (pathname === "/__mobile") {
     res.statusCode = 200;
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.end(`<!doctype html><html><head><title>Mobile Preview</title><style>body{margin:0;background:#111;display:grid;place-items:start center;min-height:100vh;padding:24px}.phone{width:390px;height:844px;border:1px solid #444;background:#000;overflow:hidden}iframe{width:390px;height:844px;border:0}</style></head><body><div class="phone"><iframe src="/"></iframe></div></body></html>`);
+    res.end(
+      `<!doctype html><html><head><title>Mobile Preview</title><style>body{margin:0;background:#111;display:grid;place-items:start center;min-height:100vh;padding:24px}.phone{width:390px;height:844px;border:1px solid #444;background:#000;overflow:hidden}iframe{width:390px;height:844px;border:0}</style></head><body><div class="phone"><iframe src="/"></iframe></div></body></html>`,
+    );
     return;
   }
 
@@ -73,7 +77,10 @@ async function serveStatic(req, res) {
   try {
     const data = await fsp.readFile(file);
     res.statusCode = 200;
-    res.setHeader("Content-Type", mimeTypes[path.extname(file)] || "application/octet-stream");
+    res.setHeader(
+      "Content-Type",
+      mimeTypes[path.extname(file)] || "application/octet-stream",
+    );
     res.end(data);
   } catch (error) {
     res.statusCode = 404;
@@ -84,7 +91,8 @@ async function serveStatic(req, res) {
 loadEnv();
 
 const server = http.createServer((req, res) => {
-  const pathname = new URL(req.url, `http://${host}`).pathname;
+  const pathname = new URL(req.url, `http://${req.headers.host || host}`)
+    .pathname;
 
   if (pathname === "/api/wompi-checkout") {
     runApi(checkoutHandler, req, res);
@@ -106,5 +114,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(port, host, () => {
   console.log(`NOIR URBANO listo en http://${host}:${port}/`);
-  console.log(`Wompi: ${process.env.WOMPI_ENV || "sandbox"} / ${process.env.WOMPI_PUBLIC_KEY ? "llave publica cargada" : "sin llave publica"}`);
+  console.log(
+    `Wompi: ${process.env.WOMPI_ENV || "sandbox"} / ${process.env.WOMPI_PUBLIC_KEY ? "llave publica cargada" : "sin llave publica"}`,
+  );
 });
