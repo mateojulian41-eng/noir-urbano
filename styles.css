@@ -231,7 +231,7 @@ img {
   z-index: -4;
   background-size: cover;
   background-position: center;
-  filter: grayscale(0.15) contrast(1.05) brightness(0.9);
+  filter: grayscale(0.62) contrast(1.22) brightness(0.45);
   transform: scale(1.03);
 }
 
@@ -241,7 +241,7 @@ img {
 }
 
 .city-bg {
-  background-image: url("assets/FONDO NIGTH CARTAGENA.png");
+  background-image: url("assets/palm-street.jpg");
   background-position: center;
 }
 
@@ -505,7 +505,7 @@ img {
 .identity-image img,
 .featured-image img,
 .product-image img {
-  filter: grayscale(0.1) contrast(1.02) brightness(0.95);
+  filter: grayscale(0.55) contrast(1.2) brightness(0.58);
   transition:
     transform 800ms ease,
     filter 800ms ease;
@@ -514,7 +514,7 @@ img {
 .identity-image:hover img,
 .featured-image:hover img {
   transform: scale(1.04);
-  filter: grayscale(0.05) contrast(1.05) brightness(0.98);
+  filter: grayscale(0.32) contrast(1.23) brightness(0.64);
 }
 
 .manifesto {
@@ -613,7 +613,7 @@ img {
 
 .product-image:hover img {
   transform: scale(1.05);
-  filter: grayscale(0.05) contrast(1.05) brightness(0.98);
+  filter: grayscale(0.35) contrast(1.22) brightness(0.68);
 }
 
 .product-image:hover::after {
@@ -840,7 +840,7 @@ img {
   text-align: center;
   background:
     linear-gradient(rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.91)),
-    url("assets/MURO DE CONCRETO.png") center/cover;
+    url("assets/cartagena-palm.jpg") center/cover;
   border-top: 1px solid var(--line);
 }
 
