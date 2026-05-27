@@ -15,7 +15,9 @@ const featuredAddButton = document.querySelector("[data-featured-add]");
 const checkoutButton = document.querySelector("[data-checkout-button]");
 const checkoutNote = document.querySelector("[data-checkout-note]");
 const paymentStatus = document.querySelector("[data-payment-status]");
-const paymentStatusTitle = document.querySelector("[data-payment-status-title]");
+const paymentStatusTitle = document.querySelector(
+  "[data-payment-status-title]",
+);
 const paymentStatusCopy = document.querySelector("[data-payment-status-copy]");
 const brandContact = {
   email: "noirurbano1@gmail.com",
@@ -42,7 +44,11 @@ window.addEventListener("load", () => {
 });
 
 function getSelectedSize() {
-  return document.querySelector("[data-size-option].is-selected")?.textContent.trim() || "M";
+  return (
+    document
+      .querySelector("[data-size-option].is-selected")
+      ?.textContent.trim() || "M"
+  );
 }
 
 function openCart() {
@@ -60,7 +66,10 @@ function closeCart() {
 function renderCart() {
   const items = [...cart.values()];
   const quantity = items.reduce((sum, item) => sum + item.quantity, 0);
-  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const total = items.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0,
+  );
 
   cartCount.textContent = quantity;
   cartTotal.textContent = formatPrice(total);
@@ -84,14 +93,17 @@ function renderCart() {
             <button type="button" data-cart-plus="${item.key}" aria-label="Agregar una unidad de ${item.name}">+</button>
           </div>
         </article>
-      `
+      `,
     )
     .join("");
 }
 
 function buildOrder() {
   const items = [...cart.values()];
-  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const total = items.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0,
+  );
   const reference = `NOIR-${Date.now().toString(36).toUpperCase()}`;
 
   return {
@@ -112,7 +124,7 @@ function buildWhatsAppMessage(order) {
   const productLines = order.items
     .map(
       (item) =>
-        `- ${item.name} / Talla ${item.size} / Cantidad ${item.quantity} / ${formatPrice(item.price)}`
+        `- ${item.name} / Talla ${item.size} / Cantidad ${item.quantity} / ${formatPrice(item.price)}`,
     )
     .join("%0A");
 
@@ -127,7 +139,11 @@ function buildWhatsAppMessage(order) {
 
 function openWhatsAppCheckout(order) {
   const message = buildWhatsAppMessage(order);
-  window.open(`https://wa.me/${brandContact.whatsapp}?text=${message}`, "_blank", "noopener,noreferrer");
+  window.open(
+    `https://wa.me/${brandContact.whatsapp}?text=${message}`,
+    "_blank",
+    "noopener,noreferrer",
+  );
 }
 
 async function requestWompiCheckout(order) {
@@ -145,31 +161,11 @@ async function requestWompiCheckout(order) {
 }
 
 function openWompiCheckout(checkoutData) {
-  if (checkoutData.checkoutUrl) {
-    showPaymentStatus("Redirigiendo a Wompi", "Seras enviado al checkout seguro de Wompi sandbox.");
-    window.location.href = checkoutData.checkoutUrl;
-    return;
-  }
-
-  if (!window.WidgetCheckout) {
-    throw new Error("Wompi widget is not available");
-  }
-
-  const checkout = new WidgetCheckout({
-    currency: checkoutData.currency || wompiConfig.currency,
-    amountInCents: checkoutData.amountInCents,
-    reference: checkoutData.reference,
-    publicKey: checkoutData.publicKey,
-    signature: { integrity: checkoutData.signatureIntegrity },
-    redirectUrl: checkoutData.redirectUrl || wompiConfig.redirectUrl,
-  });
-
-  checkout.open((result) => {
-    if (result?.transaction?.id) {
-      checkoutNote.textContent = `Transaccion enviada a Wompi: ${result.transaction.id}`;
-      showPaymentStatus("Pago enviado", "Wompi esta procesando la transaccion.");
-    }
-  });
+  showPaymentStatus(
+    "Redirigiendo a Wompi",
+    "Seras enviado al checkout seguro de Wompi.",
+  );
+  window.location.href = checkoutData.checkoutUrl;
 }
 
 function showPaymentStatus(title, copy) {
@@ -181,7 +177,8 @@ function showPaymentStatus(title, copy) {
 function paymentStatusCopyFromWompi(status) {
   const statuses = {
     APPROVED: "Pago aprobado. Gracias por comprar NOIR URBANO.",
-    DECLINED: "Pago rechazado. Puedes intentar de nuevo o escribirnos por WhatsApp.",
+    DECLINED:
+      "Pago rechazado. Puedes intentar de nuevo o escribirnos por WhatsApp.",
     ERROR: "Wompi reporto un error. Escribenos por WhatsApp para ayudarte.",
     VOIDED: "Pago anulado.",
     PENDING: "Pago pendiente. Estamos esperando confirmacion de Wompi.",
@@ -195,16 +192,24 @@ async function checkRedirectPayment() {
   const transactionId = params.get("id") || params.get("transaction_id");
   if (!transactionId) return;
 
-  showPaymentStatus("Consultando pago", "Estamos verificando la transaccion en Wompi.");
+  showPaymentStatus(
+    "Consultando pago",
+    "Estamos verificando la transaccion en Wompi.",
+  );
 
   try {
-    const response = await fetch(`/api/wompi-transaction?id=${encodeURIComponent(transactionId)}`);
+    const response = await fetch(
+      `/api/wompi-transaction?id=${encodeURIComponent(transactionId)}`,
+    );
     const payload = await response.json();
     const transaction = payload.data || payload;
     const status = transaction.status || "PENDING";
     showPaymentStatus(`Pago ${status}`, paymentStatusCopyFromWompi(status));
   } catch (error) {
-    showPaymentStatus("Pago pendiente", "No pudimos consultar Wompi. Escribenos por WhatsApp.");
+    showPaymentStatus(
+      "Pago pendiente",
+      "No pudimos consultar Wompi. Escribenos por WhatsApp.",
+    );
   }
 }
 
@@ -212,7 +217,8 @@ async function startCheckout() {
   const order = buildOrder();
 
   if (!order.items.length) {
-    checkoutNote.textContent = "Agrega al menos una pieza antes de finalizar la compra.";
+    checkoutNote.textContent =
+      "Agrega al menos una pieza antes de finalizar la compra.";
     return;
   }
 
@@ -275,7 +281,10 @@ toggleButtons.forEach((button) => {
 
 addButtons.forEach((button) => {
   button.addEventListener("click", () => {
-    const size = button === featuredAddButton ? getSelectedSize() : button.dataset.size || "M";
+    const size =
+      button === featuredAddButton
+        ? getSelectedSize()
+        : button.dataset.size || "M";
     addItem(button.dataset.name, Number(button.dataset.price), size);
   });
 });
@@ -318,9 +327,11 @@ const observer = new IntersectionObserver(
       }
     });
   },
-  { threshold: 0.16 }
+  { threshold: 0.16 },
 );
 
-document.querySelectorAll(".reveal").forEach((element) => observer.observe(element));
+document
+  .querySelectorAll(".reveal")
+  .forEach((element) => observer.observe(element));
 renderCart();
 checkRedirectPayment();
