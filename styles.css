@@ -241,7 +241,7 @@ img {
 }
 
 .city-bg {
-  background-image: url("assets/palm-street.jpg");
+  background-image: url("assets/FONDO NIGTH CARTAGENA.png");
   background-position: center;
 }
 
@@ -840,7 +840,7 @@ img {
   text-align: center;
   background:
     linear-gradient(rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.91)),
-    url("assets/cartagena-palm.jpg") center/cover;
+    url("assets/MURO DE CONCRETO.png") center/cover;
   border-top: 1px solid var(--line);
 }
 
