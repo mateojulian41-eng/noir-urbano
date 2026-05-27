@@ -231,7 +231,7 @@ img {
   z-index: -4;
   background-size: cover;
   background-position: center;
-  filter: grayscale(0.1) contrast(1.05) brightness(1);
+  filter: none;
   transform: scale(1.03);
 }
 
@@ -241,8 +241,19 @@ img {
 }
 
 .city-bg {
-  background-image: url("assets/palm-street.jpg");
+  background-image: url("assets/FONDO NIGTH CARTAGENA.png");
   background-position: center;
+}
+
+.final-cta-bg {
+  position: absolute;
+  inset: 0;
+  z-index: -4;
+  background-size: cover;
+  background-position: center;
+  background-image: url("assets/MURO DE CONCRETO.png");
+  filter: none;
+  transform: scale(1.03);
 }
 
 .hero::before,
