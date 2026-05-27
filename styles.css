@@ -516,7 +516,7 @@ img {
 .identity-image img,
 .featured-image img,
 .product-image img {
-  filter: grayscale(0.55) contrast(1.2) brightness(0.58);
+  filter: grayscale(0.25) contrast(1.15) brightness(0.95);
   transition:
     transform 800ms ease,
     filter 800ms ease;
@@ -624,7 +624,7 @@ img {
 
 .product-image:hover img {
   transform: scale(1.05);
-  filter: grayscale(0.35) contrast(1.22) brightness(0.68);
+  filter: grayscale(0.15) contrast(1.2) brightness(1.05);
 }
 
 .product-image:hover::after {
