@@ -231,7 +231,7 @@ img {
   z-index: -4;
   background-size: cover;
   background-position: center;
-  filter: grayscale(0.35) contrast(1.1) brightness(0.75);
+  filter: grayscale(0.15) contrast(1.05) brightness(0.9);
   transform: scale(1.03);
 }
 
@@ -505,7 +505,7 @@ img {
 .identity-image img,
 .featured-image img,
 .product-image img {
-  filter: grayscale(0.25) contrast(1.05) brightness(0.85);
+  filter: grayscale(0.1) contrast(1.02) brightness(0.95);
   transition:
     transform 800ms ease,
     filter 800ms ease;
@@ -514,7 +514,7 @@ img {
 .identity-image:hover img,
 .featured-image:hover img {
   transform: scale(1.04);
-  filter: grayscale(0.15) contrast(1.1) brightness(0.9);
+  filter: grayscale(0.05) contrast(1.05) brightness(0.98);
 }
 
 .manifesto {
@@ -613,7 +613,7 @@ img {
 
 .product-image:hover img {
   transform: scale(1.05);
-  filter: grayscale(0.15) contrast(1.1) brightness(0.9);
+  filter: grayscale(0.05) contrast(1.05) brightness(0.98);
 }
 
 .product-image:hover::after {
