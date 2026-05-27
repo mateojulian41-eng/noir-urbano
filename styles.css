@@ -231,7 +231,7 @@ img {
   z-index: -4;
   background-size: cover;
   background-position: center;
-  filter: brightness(1.15) contrast(1.1) saturate(1.1);
+  filter: brightness(0.85) contrast(1.15) saturate(0.9);
   transform: scale(1.03);
 }
 
@@ -252,7 +252,7 @@ img {
   background-size: cover;
   background-position: center;
   background-image: url("assets/MURO DE CONCRETO.png");
-  filter: brightness(1.15) contrast(1.1) saturate(1.1);
+  filter: brightness(0.85) contrast(1.15) saturate(0.9);
   transform: scale(1.03);
 }
 
@@ -516,7 +516,7 @@ img {
 .identity-image img,
 .featured-image img,
 .product-image img {
-  filter: grayscale(0.25) contrast(1.15) brightness(0.95);
+  filter: grayscale(0.35) contrast(1.2) brightness(0.88);
   transition:
     transform 800ms ease,
     filter 800ms ease;
@@ -624,7 +624,7 @@ img {
 
 .product-image:hover img {
   transform: scale(1.05);
-  filter: grayscale(0.15) contrast(1.2) brightness(1.05);
+  filter: grayscale(0.25) contrast(1.25) brightness(0.95);
 }
 
 .product-image:hover::after {
