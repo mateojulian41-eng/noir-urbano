@@ -68,7 +68,9 @@ img {
   place-items: center;
   color: var(--white);
   background: var(--black);
-  transition: opacity 700ms ease, visibility 700ms ease;
+  transition:
+    opacity 700ms ease,
+    visibility 700ms ease;
 }
 
 .loader span {
@@ -87,7 +89,11 @@ img {
   position: relative;
   min-height: 100vh;
   background:
-    radial-gradient(circle at 50% -10%, rgba(166, 136, 103, 0.11), transparent 33rem),
+    radial-gradient(
+      circle at 50% -10%,
+      rgba(166, 136, 103, 0.11),
+      transparent 33rem
+    ),
     linear-gradient(180deg, #050505 0%, #020202 100%);
 }
 
@@ -230,7 +236,7 @@ img {
 }
 
 .hero-bg {
-  background-image: url("assets/hero-model.jpg");
+  background-image: url("assets/FONDO GRUPO DE JOVENES.png");
   background-position: center 38%;
 }
 
@@ -246,9 +252,23 @@ img {
   inset: 0;
   z-index: -3;
   background:
-    linear-gradient(90deg, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.56) 45%, rgba(0, 0, 0, 0.82) 100%),
-    radial-gradient(circle at 72% 34%, rgba(166, 136, 103, 0.17), transparent 27rem),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.54) 0%, rgba(0, 0, 0, 0.15) 36%, rgba(0, 0, 0, 0.9) 100%);
+    linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.9) 0%,
+      rgba(0, 0, 0, 0.56) 45%,
+      rgba(0, 0, 0, 0.82) 100%
+    ),
+    radial-gradient(
+      circle at 72% 34%,
+      rgba(166, 136, 103, 0.17),
+      transparent 27rem
+    ),
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.54) 0%,
+      rgba(0, 0, 0, 0.15) 36%,
+      rgba(0, 0, 0, 0.9) 100%
+    );
 }
 
 .hero::after,
@@ -279,7 +299,12 @@ img {
   top: 50%;
   width: min(42vw, 520px);
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(166, 136, 103, 0.65), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(166, 136, 103, 0.65),
+    transparent
+  );
   opacity: 0.54;
 }
 
@@ -331,7 +356,10 @@ img {
   font-weight: 900;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  transition: color 260ms ease, transform 260ms ease, border-color 260ms ease;
+  transition:
+    color 260ms ease,
+    transform 260ms ease,
+    border-color 260ms ease;
 }
 
 .btn::before {
@@ -478,7 +506,9 @@ img {
 .featured-image img,
 .product-image img {
   filter: grayscale(0.55) contrast(1.2) brightness(0.58);
-  transition: transform 800ms ease, filter 800ms ease;
+  transition:
+    transform 800ms ease,
+    filter 800ms ease;
 }
 
 .identity-image:hover img,
@@ -491,8 +521,7 @@ img {
   padding: clamp(56px, 7vw, 92px) clamp(20px, 5vw, 72px);
   border-top: 1px solid var(--line);
   background:
-    linear-gradient(90deg, rgba(166, 136, 103, 0.09), transparent 42%),
-    #050505;
+    linear-gradient(90deg, rgba(166, 136, 103, 0.09), transparent 42%), #050505;
 }
 
 .manifesto-grid {
@@ -515,8 +544,7 @@ img {
 .drop {
   padding: clamp(76px, 9vw, 128px) clamp(18px, 5vw, 72px);
   background:
-    linear-gradient(180deg, #050505 0%, #101010 42%, #050505 100%),
-    var(--black);
+    linear-gradient(180deg, #050505 0%, #101010 42%, #050505 100%), var(--black);
   border-top: 1px solid var(--line);
 }
 
@@ -558,7 +586,11 @@ img {
   z-index: 2;
   background:
     linear-gradient(180deg, transparent 22%, rgba(0, 0, 0, 0.72) 100%),
-    radial-gradient(circle at 82% 18%, rgba(166, 136, 103, 0.24), transparent 30%);
+    radial-gradient(
+      circle at 82% 18%,
+      rgba(166, 136, 103, 0.24),
+      transparent 30%
+    );
   pointer-events: none;
 }
 
@@ -574,7 +606,9 @@ img {
   font-size: 0.68rem;
   font-weight: 900;
   letter-spacing: 0.16em;
-  transition: opacity 260ms ease, transform 260ms ease;
+  transition:
+    opacity 260ms ease,
+    transform 260ms ease;
 }
 
 .product-image:hover img {
@@ -620,8 +654,18 @@ img {
   opacity: 0.24;
   background:
     linear-gradient(100deg, transparent 46%, var(--white) 48%, transparent 52%),
-    radial-gradient(ellipse at 50% 18%, transparent 30%, var(--white) 32%, transparent 34%),
-    repeating-conic-gradient(from 190deg at 50% 20%, transparent 0deg 13deg, var(--white) 14deg 16deg, transparent 17deg 28deg);
+    radial-gradient(
+      ellipse at 50% 18%,
+      transparent 30%,
+      var(--white) 32%,
+      transparent 34%
+    ),
+    repeating-conic-gradient(
+      from 190deg at 50% 20%,
+      transparent 0deg 13deg,
+      var(--white) 14deg 16deg,
+      transparent 17deg 28deg
+    );
   mask-image: radial-gradient(circle at 50% 45%, #000 0 58%, transparent 59%);
 }
 
@@ -663,8 +707,7 @@ img {
 
 .featured {
   background:
-    linear-gradient(90deg, rgba(166, 136, 103, 0.09), transparent 48%),
-    #050505;
+    linear-gradient(90deg, rgba(166, 136, 103, 0.09), transparent 48%), #050505;
 }
 
 .feature-note {
@@ -710,7 +753,10 @@ img {
   cursor: pointer;
   font-size: 0.78rem;
   font-weight: 900;
-  transition: color 220ms ease, background 220ms ease, border-color 220ms ease;
+  transition:
+    color 220ms ease,
+    background 220ms ease,
+    border-color 220ms ease;
 }
 
 .size-option:hover,
@@ -812,8 +858,7 @@ img {
   padding: clamp(72px, 8vw, 116px) clamp(20px, 5vw, 72px);
   border-top: 1px solid var(--line);
   background:
-    linear-gradient(90deg, rgba(166, 136, 103, 0.08), transparent 48%),
-    #050505;
+    linear-gradient(90deg, rgba(166, 136, 103, 0.08), transparent 48%), #050505;
 }
 
 .contact-copy h2 {
@@ -847,7 +892,10 @@ img {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent),
     rgba(255, 255, 255, 0.015);
-  transition: border-color 220ms ease, transform 220ms ease, background 220ms ease;
+  transition:
+    border-color 220ms ease,
+    transform 220ms ease,
+    background 220ms ease;
 }
 
 .contact-link:hover {
@@ -1064,7 +1112,10 @@ img {
   font-size: 0.72rem;
   font-weight: 900;
   letter-spacing: 0.08em;
-  transition: transform 220ms ease, background 220ms ease, color 220ms ease;
+  transition:
+    transform 220ms ease,
+    background 220ms ease,
+    color 220ms ease;
 }
 
 .whatsapp-float:hover {
@@ -1076,7 +1127,9 @@ img {
 .reveal {
   opacity: 0;
   transform: translateY(28px);
-  transition: opacity 760ms ease, transform 760ms ease;
+  transition:
+    opacity 760ms ease,
+    transform 760ms ease;
 }
 
 .reveal.is-visible {
