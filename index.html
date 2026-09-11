@@ -34,9 +34,10 @@
       </nav>
     </header>
 
-    <div class="payment-status" data-payment-status hidden>
+    <div class="payment-status" data-payment-status role="status" aria-live="polite" hidden>
       <strong data-payment-status-title>Pago Wompi</strong>
       <span data-payment-status-copy>Consultando estado de la transaccion.</span>
+      <button class="payment-status-close" type="button" data-payment-status-close aria-label="Cerrar aviso de pago">Cerrar</button>
     </div>
 
     <main id="top">

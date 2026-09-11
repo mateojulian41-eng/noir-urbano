@@ -19,6 +19,7 @@ const paymentStatusTitle = document.querySelector(
   "[data-payment-status-title]",
 );
 const paymentStatusCopy = document.querySelector("[data-payment-status-copy]");
+const paymentStatusClose = document.querySelector("[data-payment-status-close]");
 const brandContact = {
   email: "noirurbano1@gmail.com",
   whatsapp: "573135859810",
@@ -168,23 +169,51 @@ function openWompiCheckout(checkoutData) {
   window.location.href = checkoutData.checkoutUrl;
 }
 
-function showPaymentStatus(title, copy) {
+const paymentStates = {
+  APPROVED: {
+    title: "Pago aprobado",
+    copy: "Tu pedido fue confirmado correctamente. Gracias por comprar NOIR URBANO.",
+    tone: "approved",
+  },
+  DECLINED: {
+    title: "Pago rechazado",
+    copy: "El pago fue rechazado. Puedes intentarlo de nuevo o escribirnos por WhatsApp.",
+    tone: "declined",
+  },
+  VOIDED: {
+    title: "Pago anulado",
+    copy: "La transacción fue anulada y no se realizó el cobro.",
+    tone: "voided",
+  },
+  ERROR: {
+    title: "Error en el pago",
+    copy: "Wompi reportó un error al procesar el pago. Escríbenos por WhatsApp para ayudarte.",
+    tone: "error",
+  },
+  PENDING: {
+    title: "Pago pendiente",
+    copy: "El pago sigue en proceso. Estamos esperando confirmación de Wompi.",
+    tone: "pending",
+  },
+};
+
+function showPaymentStatus(title, copy, tone = "pending") {
   paymentStatusTitle.textContent = title;
   paymentStatusCopy.textContent = copy;
+  paymentStatus.className = `payment-status payment-status--${tone}`;
   paymentStatus.hidden = false;
 }
 
-function paymentStatusCopyFromWompi(status) {
-  const statuses = {
-    APPROVED: "Pago aprobado. Gracias por comprar NOIR URBANO.",
-    DECLINED:
-      "Pago rechazado. Puedes intentar de nuevo o escribirnos por WhatsApp.",
-    ERROR: "Wompi reporto un error. Escribenos por WhatsApp para ayudarte.",
-    VOIDED: "Pago anulado.",
-    PENDING: "Pago pendiente. Estamos esperando confirmacion de Wompi.",
-  };
+function clearPaymentStatus() {
+  paymentStatus.hidden = true;
+}
 
-  return statuses[status] || "Transaccion consultada en Wompi.";
+function clearPaymentParams() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("id");
+  url.searchParams.delete("transaction_id");
+  url.searchParams.delete("pago");
+  window.history.replaceState({}, document.title, url);
 }
 
 async function checkRedirectPayment() {
@@ -195,6 +224,7 @@ async function checkRedirectPayment() {
   showPaymentStatus(
     "Consultando pago",
     "Estamos verificando la transaccion en Wompi.",
+    "pending",
   );
 
   try {
@@ -203,13 +233,22 @@ async function checkRedirectPayment() {
     );
     const payload = await response.json();
     const transaction = payload.data || payload;
-    const status = transaction.status || "PENDING";
-    showPaymentStatus(`Pago ${status}`, paymentStatusCopyFromWompi(status));
-  } catch (error) {
+    const status = transaction.status || "ERROR";
+    const paymentState = paymentStates[status] || paymentStates.ERROR;
     showPaymentStatus(
-      "Pago pendiente",
-      "No pudimos consultar Wompi. Escribenos por WhatsApp.",
+      paymentState.title,
+      paymentState.copy,
+      paymentState.tone,
     );
+
+    if (status === "APPROVED") {
+      cart.clear();
+      renderCart();
+    }
+  } catch (error) {
+    showPaymentStatus("Error en el pago", "No pudimos consultar Wompi. Escríbenos por WhatsApp para ayudarte.", "error");
+  } finally {
+    clearPaymentParams();
   }
 }
 
@@ -317,6 +356,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 checkoutButton.addEventListener("click", startCheckout);
+paymentStatusClose.addEventListener("click", clearPaymentStatus);
 
 const observer = new IntersectionObserver(
   (entries) => {
