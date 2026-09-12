@@ -1,0 +1,471 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const vm = require('node:vm');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const projectRoot = path.join(__dirname, '..');
+const checkoutHandler = require(path.join(projectRoot, 'api', 'wompi-checkout.js'));
+const transactionHandler = require(path.join(projectRoot, 'api', 'wompi-transaction.js'));
+const webhookHandler = require(path.join(projectRoot, 'api', 'wompi-webhook.js'));
+
+function createRes() {
+  return {
+    statusCode: 200,
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name] = value;
+    },
+    end(payload) {
+      this.payload = payload;
+    },
+  };
+}
+
+function createReq({ method = 'GET', url = '/', body = '', headers = {}, env = {} } = {}) {
+  const req = new (require('node:stream').PassThrough)();
+  req.method = method;
+  req.url = url;
+  req.headers = headers;
+  req.body = body;
+
+  process.nextTick(() => {
+    if (body) {
+      req.end(body);
+    } else {
+      req.end();
+    }
+  });
+
+  return req;
+}
+
+function buildCheckoutOrder(overrides = {}) {
+  return {
+    reference: 'NOIR-TEST-123',
+    currency: 'COP',
+    total: 150000,
+    items: [
+      {
+        name: 'SHADOW PALM TEE',
+        size: 'M',
+        quantity: 1,
+        price: 150000,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function createStatusPayload(status) {
+  return {
+    data: {
+      status,
+      id: 'abc123',
+      reference: 'NOIR-TEST-123',
+    },
+  };
+}
+
+function makeScriptEnvironment({ search = '', fetchImpl = async () => ({ ok: true, json: async () => ({}) }) } = {}) {
+  const toggleButton = {
+    dataset: {},
+    classList: { add() {}, remove() {}, contains() { return false; } },
+    addEventListener() {},
+    click() {},
+  };
+
+  const sizeButton = {
+    dataset: {},
+    textContent: 'M',
+    classList: { add() {}, remove() {}, contains() { return true; } },
+    addEventListener() {},
+  };
+
+  const cartDrawer = {
+    classList: { add() {}, remove() {}, contains() { return false; } },
+    setAttribute() {},
+    addEventListener() {},
+  };
+
+  const paymentStatus = {
+    hidden: true,
+    className: '',
+    textContent: '',
+    classList: { add() {}, remove() {}, contains() { return false; } },
+    addEventListener() {},
+  };
+
+  const paymentStatusTitle = { textContent: '' };
+  const paymentStatusCopy = { textContent: '' };
+
+  const checkoutButton = {
+    disabled: false,
+    textContent: 'FINALIZAR COMPRA',
+    addEventListener(event, handler) {
+      this._handler = handler;
+    },
+    click() {
+      if (this._handler) this._handler();
+    },
+  };
+
+  const cartItems = {
+    innerHTML: '',
+    addEventListener(event, handler) {
+      this._handler = handler;
+    },
+  };
+
+  const paymentStatusClose = {
+    _handler: null,
+    addEventListener(event, handler) {
+      this._handler = handler;
+    },
+    click() {
+      if (this._handler) this._handler();
+    },
+  };
+
+  const document = {
+    body: {
+      classList: {
+        add() {},
+        remove() {},
+        contains() { return false; },
+      },
+    },
+    querySelector(selector) {
+      if (selector === '[data-size-option].is-selected') return sizeButton;
+      if (selector === '[data-loader]') return { classList: { add() {}, remove() {} } };
+      if (selector === '[data-cart-drawer]') return cartDrawer;
+      if (selector === '[data-cart-items]') return cartItems;
+      if (selector === '[data-cart-count]') return { textContent: '0' };
+      if (selector === '[data-cart-total]') return { textContent: '$0 COP' };
+      if (selector === '[data-checkout-button]') return checkoutButton;
+      if (selector === '[data-checkout-note]') return { textContent: '' };
+      if (selector === '[data-payment-status]') return paymentStatus;
+      if (selector === '[data-payment-status-title]') return paymentStatusTitle;
+      if (selector === '[data-payment-status-copy]') return paymentStatusCopy;
+      if (selector === '[data-payment-status-close]') return paymentStatusClose;
+      if (selector === '[data-featured-add]') return { dataset: { name: 'SHADOW PALM TEE', price: '150000' }, addEventListener() {} };
+      return null;
+    },
+    querySelectorAll(selector) {
+      if (selector === '[data-cart-toggle]') return [toggleButton];
+      if (selector === '[data-add-to-cart]') return [{ dataset: { name: 'SHADOW PALM TEE', price: '150000', size: 'M' }, addEventListener() {} }];
+      if (selector === '[data-size-option]') return [sizeButton];
+      if (selector === '.reveal') return [];
+      return [];
+    },
+    addEventListener() {},
+  };
+
+  const windowObject = {
+    location: {
+      origin: 'http://localhost:4173',
+      pathname: '/',
+      search,
+      href: `http://localhost:4173/${search}`,
+    },
+    history: {
+      replaceState() {},
+    },
+    setTimeout(fn) { fn(); return 0; },
+    addEventListener() {},
+    open() {},
+  };
+
+  const context = {
+    window: windowObject,
+    document,
+    console,
+    fetch: fetchImpl,
+    URL,
+    URLSearchParams,
+    Intl,
+    setTimeout: (fn) => { fn(); return 0; },
+    clearTimeout() {},
+    IntersectionObserver: class { observe() {} unobserve() {} },
+  };
+
+  context.globalThis = context;
+  context.global = context;
+  context.self = context;
+
+  return context;
+}
+
+test('checkout: rechaza método HTTP no permitido', async () => {
+  const req = createReq({ method: 'GET', url: '/api/wompi-checkout' });
+  const res = createRes();
+
+  await checkoutHandler(req, res);
+
+  assert.equal(res.statusCode, 405);
+  assert.match(res.payload, /Method not allowed/i);
+});
+
+test('checkout: valida carrito vacío y rechaza orden sin productos', async () => {
+  const req = createReq({
+    method: 'POST',
+    url: '/api/wompi-checkout',
+    body: JSON.stringify({ items: [] }),
+    headers: { 'content-type': 'application/json' },
+  });
+  const res = createRes();
+
+  process.env.WOMPI_PUBLIC_KEY = 'test-public';
+  process.env.WOMPI_INTEGRITY_SECRET = 'test-secret';
+
+  await checkoutHandler(req, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.match(res.payload, /vacío|vaciar|carrito/i);
+});
+
+test('checkout: ignora precios del cliente y calcula monto exclusivamente del servidor', async () => {
+  const req = createReq({
+    method: 'POST',
+    url: '/api/wompi-checkout',
+    body: JSON.stringify({
+      items: [
+        { name: 'SHADOW PALM TEE', size: 'M', quantity: 2, price: 1 },
+      ],
+    }),
+    headers: { 'content-type': 'application/json' },
+  });
+  const res = createRes();
+
+  process.env.WOMPI_PUBLIC_KEY = 'test-public';
+  process.env.WOMPI_INTEGRITY_SECRET = 'test-secret';
+
+  await checkoutHandler(req, res);
+
+  const payload = JSON.parse(res.payload);
+  assert.equal(payload.amountInCents, 300000 * 100);
+  assert.equal(payload.currency, 'COP');
+  assert.ok(payload.checkoutUrl.includes('signature') || payload.checkoutUrl.includes('signature%3Aintegrity'));
+  assert.ok(payload.reference.startsWith('NOIR-'));
+});
+
+test('checkout: valida tallas y cantidades inválidas', async () => {
+  const badReq = createReq({
+    method: 'POST',
+    url: '/api/wompi-checkout',
+    body: JSON.stringify({ items: [{ name: 'SHADOW PALM TEE', size: 'ZZ', quantity: 1, price: 150000 }] }),
+    headers: { 'content-type': 'application/json' },
+  });
+  const badRes = createRes();
+
+  process.env.WOMPI_PUBLIC_KEY = 'test-public';
+  process.env.WOMPI_INTEGRITY_SECRET = 'test-secret';
+
+  await checkoutHandler(badReq, badRes);
+  assert.equal(badRes.statusCode, 400);
+  assert.match(badRes.payload, /talla/i);
+
+  const qtyReq = createReq({
+    method: 'POST',
+    url: '/api/wompi-checkout',
+    body: JSON.stringify({ items: [{ name: 'SHADOW PALM TEE', size: 'M', quantity: 0, price: 150000 }] }),
+    headers: { 'content-type': 'application/json' },
+  });
+  const qtyRes = createRes();
+
+  await checkoutHandler(qtyReq, qtyRes);
+  assert.equal(qtyRes.statusCode, 400);
+  assert.match(qtyRes.payload, /cantidad/i);
+});
+
+test('transaction: valida ID ausente e inválido y usa sandbox por defecto', async () => {
+  process.env.WOMPI_PRIVATE_KEY = 'private-test-key';
+
+  const badIdReq = createReq({
+    method: 'GET',
+    url: '/api/wompi-transaction?id=',
+    headers: { host: 'localhost:4173' },
+  });
+  const badIdRes = createRes();
+  await transactionHandler(badIdReq, badIdRes);
+  assert.equal(badIdRes.statusCode, 400);
+  assert.match(badIdRes.payload, /inválido|ID/i);
+
+  const invalidPatternReq = createReq({
+    method: 'GET',
+    url: '/api/wompi-transaction?id=!@@',
+    headers: { host: 'localhost:4173' },
+  });
+  const invalidPatternRes = createRes();
+  await transactionHandler(invalidPatternReq, invalidPatternRes);
+  assert.equal(invalidPatternRes.statusCode, 400);
+
+  const captured = [];
+  global.fetch = async (url, options) => {
+    captured.push({ url, headers: options.headers });
+    return {
+      status: 200,
+      async json() {
+        return { data: { status: 'APPROVED' } };
+      },
+    };
+  };
+
+  const validReq = createReq({
+    method: 'GET',
+    url: '/api/wompi-transaction?id=abc123',
+    headers: { host: 'localhost:4173' },
+  });
+  const validRes = createRes();
+  await transactionHandler(validReq, validRes);
+
+  assert.ok(captured[0].url.includes('sandbox.wompi.co'));
+  assert.match(captured[0].headers.Authorization, /Bearer/);
+  assert.ok(!validRes.payload.includes('private-test-key'));
+});
+
+test('transaction: responde 502 si hay error de red y no filtra secretos en respuesta', async () => {
+  process.env.WOMPI_PRIVATE_KEY = 'private-test-key';
+  global.fetch = async () => {
+    throw new Error('ECONNRESET');
+  };
+
+  const req = createReq({
+    method: 'GET',
+    url: '/api/wompi-transaction?id=abc123',
+    headers: { host: 'localhost:4173' },
+  });
+  const res = createRes();
+
+  await transactionHandler(req, res);
+
+  assert.equal(res.statusCode, 502);
+  assert.match(res.payload, /error de red|red|ECONNRESET/i);
+  assert.ok(!res.payload.includes('private-test-key'));
+});
+
+test('webhook: rechaza request sin secreto, JSON inválido y checksum incorrecto', async () => {
+  delete process.env.WOMPI_EVENTS_SECRET;
+
+  const noSecretReq = createReq({ method: 'POST', url: '/api/wompi-webhook', body: JSON.stringify({ ok: true }) });
+  const noSecretRes = createRes();
+  await webhookHandler(noSecretReq, noSecretRes);
+  assert.equal(noSecretRes.statusCode, 503);
+
+  process.env.WOMPI_EVENTS_SECRET = 'event-secret';
+
+  const invalidJsonReq = createReq({ method: 'POST', url: '/api/wompi-webhook', body: '{bad json' });
+  const invalidJsonRes = createRes();
+  await webhookHandler(invalidJsonReq, invalidJsonRes);
+  assert.equal(invalidJsonRes.statusCode, 400);
+
+  const invalidChecksumReq = createReq({
+    method: 'POST',
+    url: '/api/wompi-webhook',
+    body: JSON.stringify({
+      event: 'transaction.updated',
+      data: { transaction: { status: 'DECLINED', reference: 'REF-123' } },
+      meta: { timestamp: '123', signature: { checksum: 'abcd', properties: ['status'] } },
+    }),
+  });
+  const invalidChecksumRes = createRes();
+  await webhookHandler(invalidChecksumReq, invalidChecksumRes);
+  assert.equal(invalidChecksumRes.statusCode, 401);
+  assert.match(invalidChecksumRes.payload, /checksum/i);
+});
+
+test('webhook: acepta payload válido y no expone secretos ni datos sensibles en logs', async () => {
+  process.env.WOMPI_EVENTS_SECRET = 'event-secret';
+  const crypto = require('node:crypto');
+  const payload = {
+    event: 'transaction.updated',
+    data: {
+      transaction: {
+        status: 'APPROVED',
+        reference: 'REF-123',
+        email: 'person@example.com',
+      },
+    },
+    meta: {
+      timestamp: '12345',
+      signature: {
+        checksum: '',
+        properties: ['status', 'reference'],
+      },
+    },
+  };
+
+  const values = ['APPROVED', 'REF-123'];
+  const expected = crypto.createHash('sha256').update([...values, payload.meta.timestamp, 'event-secret'].join('')).digest('hex');
+  payload.meta.signature.checksum = expected;
+
+  let logged = '';
+  const originalLog = console.log;
+  console.log = (...args) => {
+    logged += args.join(' ');
+  };
+
+  try {
+    const req = createReq({
+      method: 'POST',
+      url: '/api/wompi-webhook',
+      body: JSON.stringify(payload),
+    });
+    const res = createRes();
+
+    await webhookHandler(req, res);
+
+    assert.equal(res.statusCode, 200);
+    assert.match(res.payload, /received/i);
+    assert.ok(!logged.includes('event-secret'));
+    assert.ok(!logged.includes('person@example.com'));
+  } finally {
+    console.log = originalLog;
+  }
+});
+
+test('script: estados de pago en español, clases visuales y cierre del aviso', async () => {
+  const fetchImpl = async () => ({
+    ok: true,
+    json: async () => ({ data: { status: 'DECLINED' } }),
+  });
+
+  const context = makeScriptEnvironment({ search: '?id=tx-1', fetchImpl });
+  const scriptSource = fs.readFileSync(path.join(projectRoot, 'script.js'), 'utf8');
+  vm.runInNewContext(scriptSource, context);
+
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const paymentStatus = context.document.querySelector('[data-payment-status]');
+  const title = context.document.querySelector('[data-payment-status-title]');
+  const copy = context.document.querySelector('[data-payment-status-copy]');
+  const closeButton = context.document.querySelector('[data-payment-status-close]');
+
+  assert.equal(paymentStatus.hidden, false);
+  assert.match(title.textContent, /rechazado|declin/gi);
+  assert.match(copy.textContent, /rechazado|escríbenos|intentarlo/i);
+  assert.match(paymentStatus.className, /declined|error|pending|approved|voided/);
+
+  closeButton.click();
+  assert.equal(paymentStatus.hidden, true);
+});
+
+test('script: limpia parámetros de URL y no vacía carrito salvo APPROVED', async () => {
+  const created = [];
+  const fetchImpl = async () => ({
+    ok: true,
+    json: async () => ({ data: { status: 'DECLINED' } }),
+  });
+
+  const context = makeScriptEnvironment({ search: '?id=tx-1&pago=wompi&transaction_id=tx-extra', fetchImpl });
+  const scriptSource = fs.readFileSync(path.join(projectRoot, 'script.js'), 'utf8');
+  vm.runInNewContext(scriptSource, context);
+
+  const location = context.window.location;
+  assert.equal(location.search, '?id=tx-1&pago=wompi&transaction_id=tx-extra');
+  assert.ok(location.href.includes('pago=wompi'));
+
+  const cartItems = context.document.querySelector('[data-cart-items]');
+  assert.ok(cartItems.innerHTML.includes('Tu carrito está vacío') || cartItems.innerHTML === '');
+});

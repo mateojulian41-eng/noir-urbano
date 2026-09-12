@@ -26,10 +26,12 @@ function verifyChecksum(payload, secret) {
   const raw = [...values, timestamp, secret].join("");
   const expected = crypto.createHash("sha256").update(raw).digest("hex");
 
-  return crypto.timingSafeEqual(
-    Buffer.from(expected, "hex"),
-    Buffer.from(signature.checksum, "hex")
-  );
+  const expectedBuffer = Buffer.from(expected, "hex");
+  const actualBuffer = Buffer.from(signature.checksum, "hex");
+
+  if (expectedBuffer.length !== actualBuffer.length) return false;
+
+  return crypto.timingSafeEqual(expectedBuffer, actualBuffer);
 }
 
 module.exports = async function handler(req, res) {

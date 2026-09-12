@@ -30,15 +30,26 @@ module.exports = async function handler(req, res) {
       ? "https://production.wompi.co/v1"
       : "https://sandbox.wompi.co/v1";
 
-  const response = await fetch(`${apiBase}/transactions/${transactionId}`, {
-    headers: {
-      Authorization: `Bearer ${privateKey}`,
-    },
-  });
+  try {
+    const response = await fetch(`${apiBase}/transactions/${transactionId}`, {
+      headers: {
+        Authorization: `Bearer ${privateKey}`,
+      },
+    });
 
-  const payload = await response.json();
+    const payload = await response.json();
 
-  res.statusCode = response.status;
-  res.setHeader("Content-Type", "application/json");
-  res.end(JSON.stringify(payload));
+    res.statusCode = response.status;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify(payload));
+  } catch (error) {
+    res.statusCode = 502;
+    res.setHeader("Content-Type", "application/json");
+    res.end(
+      JSON.stringify({
+        error: "Error de red al consultar la transacción en Wompi.",
+        detail: error.message || "Unknown error",
+      }),
+    );
+  }
 };
