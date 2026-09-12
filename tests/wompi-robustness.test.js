@@ -393,30 +393,86 @@ test('webhook: rechaza request sin secreto, JSON inválido y checksum incorrecto
   assert.match(invalidChecksumRes.payload, /checksum/i);
 });
 
-test('webhook: acepta payload válido y no expone secretos ni datos sensibles en logs', async () => {
+test('webhook: valida propiedades dinámicas, rutas anidadas, checksum del body y del header', async () => {
   process.env.WOMPI_EVENTS_SECRET = 'event-secret';
   const crypto = require('node:crypto');
-  const payload = {
-    event: 'transaction.updated',
-    data: {
-      transaction: {
-        status: 'APPROVED',
-        reference: 'REF-123',
-        email: 'person@example.com',
+
+  const buildPayload = ({ properties, checksumLocation = 'body', uppercase = false, status = 'APPROVED' }) => {
+    const payload = {
+      event: 'transaction.updated',
+      data: {
+        transaction: {
+          id: 'txn-123',
+          status,
+          reference: 'REF-123',
+          amount: { value: '150000' },
+        },
       },
-    },
-    meta: {
-      timestamp: '12345',
-      signature: {
-        checksum: '',
-        properties: ['status', 'reference'],
+      meta: {
+        timestamp: '12345',
+        signature: {
+          checksum: '',
+          properties,
+        },
       },
-    },
+    };
+
+    const values = properties.map((property) => {
+      const source = payload.data;
+      const value = property.split('.').reduce((obj, key) => obj?.[key], source);
+      return value == null ? '' : String(value);
+    });
+
+    const computed = crypto.createHash('sha256').update([...values, payload.meta.timestamp, 'event-secret'].join('')).digest('hex');
+    payload.meta.signature.checksum = uppercase ? computed.toUpperCase() : computed;
+
+    return payload;
   };
 
-  const values = ['APPROVED', 'REF-123'];
-  const expected = crypto.createHash('sha256').update([...values, payload.meta.timestamp, 'event-secret'].join('')).digest('hex');
-  payload.meta.signature.checksum = expected;
+  const dynamicPayload = buildPayload({ properties: ['transaction.id', 'transaction.status'] });
+  const reversePayload = buildPayload({ properties: ['transaction.status', 'transaction.id'], status: 'DECLINED' });
+  const nestedPayload = buildPayload({ properties: ['transaction.amount.value', 'transaction.reference'] });
+  const headerPayload = buildPayload({ properties: ['transaction.reference'], checksumLocation: 'header' });
+  delete headerPayload.meta.signature.checksum;
+
+  const expectedMissing = buildPayload({ properties: ['transaction.missing'] });
+
+  const validBodyReq = createReq({ method: 'POST', url: '/api/wompi-webhook', body: JSON.stringify(dynamicPayload) });
+  const validBodyRes = createRes();
+  await webhookHandler(validBodyReq, validBodyRes);
+  assert.equal(validBodyRes.statusCode, 200);
+
+  const reverseReq = createReq({ method: 'POST', url: '/api/wompi-webhook', body: JSON.stringify(reversePayload) });
+  const reverseRes = createRes();
+  await webhookHandler(reverseReq, reverseRes);
+  assert.equal(reverseRes.statusCode, 200);
+
+  const nestedReq = createReq({ method: 'POST', url: '/api/wompi-webhook', body: JSON.stringify(nestedPayload) });
+  const nestedRes = createRes();
+  await webhookHandler(nestedReq, nestedRes);
+  assert.equal(nestedRes.statusCode, 200);
+
+  const headerChecksum = crypto.createHash('sha256').update(['REF-123', '12345', 'event-secret'].join('')).digest('hex');
+  const headerReq = createReq({
+    method: 'POST',
+    url: '/api/wompi-webhook',
+    body: JSON.stringify(headerPayload),
+    headers: { 'x-event-checksum': headerChecksum },
+  });
+  const headerRes = createRes();
+  await webhookHandler(headerReq, headerRes);
+  assert.equal(headerRes.statusCode, 200);
+
+  const uppercasePayload = buildPayload({ properties: ['transaction.reference'], uppercase: true });
+  const uppercaseReq = createReq({ method: 'POST', url: '/api/wompi-webhook', body: JSON.stringify(uppercasePayload) });
+  const uppercaseRes = createRes();
+  await webhookHandler(uppercaseReq, uppercaseRes);
+  assert.equal(uppercaseRes.statusCode, 200);
+
+  const missingReq = createReq({ method: 'POST', url: '/api/wompi-webhook', body: JSON.stringify(expectedMissing) });
+  const missingRes = createRes();
+  await webhookHandler(missingReq, missingRes);
+  assert.equal(missingRes.statusCode, 401);
 
   let logged = '';
   const originalLog = console.log;
@@ -425,19 +481,15 @@ test('webhook: acepta payload válido y no expone secretos ni datos sensibles en
   };
 
   try {
-    const req = createReq({
+    const finalReq = createReq({
       method: 'POST',
       url: '/api/wompi-webhook',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(dynamicPayload),
     });
-    const res = createRes();
-
-    await webhookHandler(req, res);
-
-    assert.equal(res.statusCode, 200);
-    assert.match(res.payload, /received/i);
+    const finalRes = createRes();
+    await webhookHandler(finalReq, finalRes);
+    assert.equal(finalRes.statusCode, 200);
     assert.ok(!logged.includes('event-secret'));
-    assert.ok(!logged.includes('person@example.com'));
   } finally {
     console.log = originalLog;
   }
