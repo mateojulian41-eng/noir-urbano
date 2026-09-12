@@ -67,7 +67,23 @@ function createStatusPayload(status) {
   };
 }
 
-function makeScriptEnvironment({ search = '', fetchImpl = async () => ({ ok: true, json: async () => ({}) }) } = {}) {
+function makeScriptEnvironment({ search = '', fetchImpl = async () => ({ ok: true, json: async () => ({}) }), initialStorage = {} } = {}) {
+  const storage = { ...initialStorage };
+  const localStorage = {
+    getItem(key) {
+      return Object.prototype.hasOwnProperty.call(storage, key) ? storage[key] : null;
+    },
+    setItem(key, value) {
+      storage[key] = String(value);
+    },
+    removeItem(key) {
+      delete storage[key];
+    },
+    clear() {
+      Object.keys(storage).forEach((key) => delete storage[key]);
+    },
+  };
+
   const toggleButton = {
     dataset: {},
     classList: { add() {}, remove() {}, contains() { return false; } },
@@ -98,6 +114,8 @@ function makeScriptEnvironment({ search = '', fetchImpl = async () => ({ ok: tru
 
   const paymentStatusTitle = { textContent: '' };
   const paymentStatusCopy = { textContent: '' };
+  const cartCountNode = { textContent: '0' };
+  const cartTotalNode = { textContent: '$0 COP' };
 
   const checkoutButton = {
     disabled: false,
@@ -140,8 +158,8 @@ function makeScriptEnvironment({ search = '', fetchImpl = async () => ({ ok: tru
       if (selector === '[data-loader]') return { classList: { add() {}, remove() {} } };
       if (selector === '[data-cart-drawer]') return cartDrawer;
       if (selector === '[data-cart-items]') return cartItems;
-      if (selector === '[data-cart-count]') return { textContent: '0' };
-      if (selector === '[data-cart-total]') return { textContent: '$0 COP' };
+      if (selector === '[data-cart-count]') return cartCountNode;
+      if (selector === '[data-cart-total]') return cartTotalNode;
       if (selector === '[data-checkout-button]') return checkoutButton;
       if (selector === '[data-checkout-note]') return { textContent: '' };
       if (selector === '[data-payment-status]') return paymentStatus;
@@ -181,6 +199,7 @@ function makeScriptEnvironment({ search = '', fetchImpl = async () => ({ ok: tru
     document,
     console,
     fetch: fetchImpl,
+    localStorage,
     URL,
     URLSearchParams,
     Intl,
@@ -451,21 +470,40 @@ test('script: estados de pago en español, clases visuales y cierre del aviso', 
   assert.equal(paymentStatus.hidden, true);
 });
 
-test('script: limpia parámetros de URL y no vacía carrito salvo APPROVED', async () => {
-  const created = [];
+test('script: conserva el carrito cuando Wompi devuelve DECLINED y limpia URL', async () => {
   const fetchImpl = async () => ({
     ok: true,
     json: async () => ({ data: { status: 'DECLINED' } }),
   });
 
-  const context = makeScriptEnvironment({ search: '?id=tx-1&pago=wompi&transaction_id=tx-extra', fetchImpl });
+  const persistedCart = JSON.stringify({
+    'SHADOW PALM TEE-M': {
+      key: 'SHADOW PALM TEE-M',
+      name: 'SHADOW PALM TEE',
+      price: 150000,
+      size: 'M',
+      quantity: 1,
+    },
+  });
+
+  const context = makeScriptEnvironment({
+    search: '?id=tx-1&pago=wompi&transaction_id=tx-extra',
+    fetchImpl,
+    initialStorage: {
+      'noir-urbano-cart': persistedCart,
+    },
+  });
+
   const scriptSource = fs.readFileSync(path.join(projectRoot, 'script.js'), 'utf8');
   vm.runInNewContext(scriptSource, context);
 
-  const location = context.window.location;
-  assert.equal(location.search, '?id=tx-1&pago=wompi&transaction_id=tx-extra');
-  assert.ok(location.href.includes('pago=wompi'));
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
 
-  const cartItems = context.document.querySelector('[data-cart-items]');
-  assert.ok(cartItems.innerHTML.includes('Tu carrito está vacío') || cartItems.innerHTML === '');
+  const cartCount = context.document.querySelector('[data-cart-count]');
+  assert.equal(Number(cartCount.textContent), 1);
+
+  const storageValue = context.localStorage.getItem('noir-urbano-cart');
+  assert.ok(storageValue.includes('SHADOW PALM TEE'));
+  assert.ok(storageValue.includes('"quantity":1'));
 });

@@ -2,7 +2,39 @@ const currency = new Intl.NumberFormat("es-CO", {
   maximumFractionDigits: 0,
 });
 
+const CART_STORAGE_KEY = "noir-urbano-cart";
 const cart = new Map();
+
+function hydrateCartFromStorage() {
+  try {
+    const raw = localStorage.getItem(CART_STORAGE_KEY);
+    if (!raw) return;
+
+    const parsed = JSON.parse(raw);
+    const items = Array.isArray(parsed) ? parsed : Object.values(parsed || {});
+
+    for (const item of items) {
+      if (!item?.key || !item?.name || !item?.price || !item?.size) continue;
+
+      cart.set(item.key, {
+        ...item,
+        quantity: Number(item.quantity) || 1,
+      });
+    }
+  } catch (error) {
+    console.warn("No se pudo restaurar el carrito persistido.", error);
+  }
+}
+
+function saveCart() {
+  try {
+    const items = [...cart.values()];
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
+  } catch (error) {
+    console.warn("No se pudo guardar el carrito.", error);
+  }
+}
+
 const loader = document.querySelector("[data-loader]");
 const cartDrawer = document.querySelector("[data-cart-drawer]");
 const cartItems = document.querySelector("[data-cart-items]");
@@ -243,7 +275,10 @@ async function checkRedirectPayment() {
 
     if (status === "APPROVED") {
       cart.clear();
+      saveCart();
       renderCart();
+    } else {
+      saveCart();
     }
   } catch (error) {
     showPaymentStatus("Error en el pago", "No pudimos consultar Wompi. Escríbenos por WhatsApp para ayudarte.", "error");
@@ -290,6 +325,7 @@ function addItem(name, price, size) {
     quantity: existing ? existing.quantity + 1 : 1,
   });
 
+  saveCart();
   renderCart();
   openCart();
 }
@@ -305,6 +341,7 @@ function updateQuantity(key, delta) {
     cart.set(key, { ...item, quantity: nextQuantity });
   }
 
+  saveCart();
   renderCart();
 }
 
@@ -373,5 +410,6 @@ const observer = new IntersectionObserver(
 document
   .querySelectorAll(".reveal")
   .forEach((element) => observer.observe(element));
+hydrateCartFromStorage();
 renderCart();
 checkRedirectPayment();
