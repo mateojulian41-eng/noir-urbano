@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { getOrderService } = require("../domain/orders/order-runtime");
 
 const ALLOWED_PRODUCTS = {
   "SHADOW PALM TEE": 150000,
@@ -69,6 +70,13 @@ module.exports = async function handler(req, res) {
   const integritySecret = process.env.WOMPI_INTEGRITY_SECRET;
   const wompiEnv = process.env.WOMPI_ENV || "sandbox";
 
+  if (wompiEnv !== "sandbox") {
+    res.statusCode = 503;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: "Solo Wompi Sandbox está habilitado." }));
+    return;
+  }
+
   if (!publicKey || !integritySecret) {
     res.statusCode = 503;
     res.setHeader("Content-Type", "application/json");
@@ -98,7 +106,21 @@ module.exports = async function handler(req, res) {
 
   const amountInCents = total * 100;
   const currency = "COP";
-  const reference = `NOIR-${Date.now().toString(36).toUpperCase()}`;
+  const reference = `NOIR-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+
+  try {
+    await getOrderService().createPendingOrder({
+      wompi_reference: reference,
+      currency: "COP",
+      items: order.items.map(({ name, size, quantity }) => ({ name, size, quantity })),
+      amount_in_cents: amountInCents,
+    });
+  } catch (error) {
+    res.statusCode = 503;
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ error: error.message || "No se pudo preparar el pedido." }));
+    return;
+  }
 
   const redirectUrl =
     process.env.WOMPI_REDIRECT_URL ||
