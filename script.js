@@ -5,6 +5,7 @@ const currency = new Intl.NumberFormat("es-CO", {
 const CART_STORAGE_KEY = "noir-urbano-cart";
 const ORDER_ACCESS_STORAGE_KEY = "noir_urbano_order_access";
 const cart = new Map();
+let orderAccessMemory = null;
 
 function hydrateCartFromStorage() {
   try {
@@ -50,6 +51,7 @@ const checkoutNote = document.querySelector("[data-checkout-note]");
 const trackingPanel = document.querySelector("[data-order-tracking]");
 const trackingForm = document.querySelector("[data-tracking-form]");
 const trackingResult = document.querySelector("[data-tracking-result]");
+const trackingAccessNote = document.querySelector("[data-tracking-access-note]");
 const trackingOpen = document.querySelector("[data-tracking-open]");
 const trackingClose = document.querySelector("[data-tracking-close]");
 const trackingClear = document.querySelector("[data-tracking-clear]");
@@ -248,24 +250,35 @@ function clearPaymentStatus() {
 }
 
 function readOrderAccess() {
+  if (orderAccessMemory) return orderAccessMemory;
   try {
     const access = JSON.parse(localStorage.getItem(ORDER_ACCESS_STORAGE_KEY) || "null");
-    return access?.order_number && access?.lookup_token ? access : null;
+    if (access?.order_number && access?.lookup_token) {
+      orderAccessMemory = {
+        order_number: access.order_number,
+        lookup_token: access.lookup_token,
+      };
+      return orderAccessMemory;
+    }
   } catch {
-    return null;
+    // Ignore malformed local access and require manual entry.
   }
+  return null;
 }
 
 function saveOrderAccess(access) {
   if (!access?.order_number || !access?.lookup_token) return;
-  localStorage.setItem(ORDER_ACCESS_STORAGE_KEY, JSON.stringify({
+  orderAccessMemory = {
     order_number: access.order_number,
     lookup_token: access.lookup_token,
-  }));
+  };
+  localStorage.setItem(ORDER_ACCESS_STORAGE_KEY, JSON.stringify(orderAccessMemory));
 }
 
 function clearOrderAccess() {
   localStorage.removeItem(ORDER_ACCESS_STORAGE_KEY);
+  orderAccessMemory = null;
+  updateTrackingAccessState();
   if (trackingForm) trackingForm.reset();
   if (trackingResult) {
     trackingResult.hidden = true;
@@ -279,10 +292,19 @@ function openOrderTracking() {
   const access = readOrderAccess();
   const numberInput = trackingForm?.elements?.order_number;
   if (numberInput && access) numberInput.value = access.order_number;
+  updateTrackingAccessState();
+  if (access) queryStoredOrderAccess(access);
 }
 
 function closeOrderTracking() {
   if (trackingPanel) trackingPanel.hidden = true;
+}
+
+function updateTrackingAccessState() {
+  const hasLocalAccess = Boolean(readOrderAccess());
+  const tokenInput = trackingForm?.elements?.token;
+  if (tokenInput) tokenInput.required = !hasLocalAccess;
+  if (trackingAccessNote) trackingAccessNote.hidden = !hasLocalAccess;
 }
 
 const paymentLabels = {
@@ -332,13 +354,26 @@ async function requestOrderStatus(orderNumber, token) {
 async function submitOrderTracking(event) {
   event.preventDefault();
   const formData = new FormData(trackingForm);
-  const orderNumber = String(formData.get("order_number") || "").trim();
-  const token = String(formData.get("token") || "").trim();
+  const access = readOrderAccess();
+  const orderNumber = String(formData.get("order_number") || access?.order_number || "").trim();
+  const token = access?.lookup_token || String(formData.get("token") || "").trim();
   try {
     const order = await requestOrderStatus(orderNumber, token);
     saveOrderAccess({ order_number: orderNumber, lookup_token: token });
     renderTrackingResult(order);
     trackingForm.elements.token.value = "";
+  } catch (error) {
+    if (trackingResult) {
+      trackingResult.textContent = error.message;
+      trackingResult.hidden = false;
+    }
+  }
+}
+
+async function queryStoredOrderAccess(access) {
+  try {
+    const order = await requestOrderStatus(access.order_number, access.lookup_token);
+    renderTrackingResult(order);
   } catch (error) {
     if (trackingResult) {
       trackingResult.textContent = error.message;
@@ -506,6 +541,7 @@ trackingOpen?.addEventListener("click", openOrderTracking);
 trackingClose?.addEventListener("click", closeOrderTracking);
 trackingClear?.addEventListener("click", clearOrderAccess);
 trackingForm?.addEventListener("submit", submitOrderTracking);
+updateTrackingAccessState();
 
 const observer = new IntersectionObserver(
   (entries) => {
