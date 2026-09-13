@@ -221,6 +221,88 @@ img {
   color: #ffe19a;
 }
 
+.order-tracking {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.68);
+}
+
+.tracking-panel {
+  width: min(100%, 560px);
+  max-height: min(760px, 90vh);
+  overflow: auto;
+  padding: clamp(24px, 5vw, 42px);
+  border: 1px solid var(--line);
+  background: var(--charcoal);
+  box-shadow: var(--deep-shadow);
+}
+
+.tracking-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.tracking-form {
+  display: grid;
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.tracking-form label {
+  display: grid;
+  gap: 8px;
+  color: var(--soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tracking-form input {
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  color: var(--white);
+  background: var(--black);
+}
+
+.tracking-result {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  color: var(--soft);
+}
+
+.tracking-result h3 {
+  margin: 0 0 12px;
+  color: var(--white);
+  font-family: var(--font-display);
+}
+
+.tracking-result ul {
+  display: grid;
+  gap: 8px;
+  padding-left: 18px;
+}
+
+.tracking-clear {
+  margin-top: 22px;
+  padding: 0;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
 .payment-status--voided {
   border-color: rgba(154, 154, 154, 0.7);
   color: #d0d0d0;

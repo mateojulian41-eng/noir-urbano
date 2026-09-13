@@ -9,6 +9,7 @@ const {
   validatePendingOrderInput,
   validateTransaction,
 } = require("./order-validation");
+const { LOOKUP_HASH_PATTERN, verifyLookupToken } = require("./order-access");
 
 const WOMPI_STATUS_MAP = Object.freeze({
   PENDING: ORDER_STATUSES.PENDING_PAYMENT,
@@ -31,10 +32,13 @@ class OrderService {
     return `NU-${timestamp}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
   }
 
-  async createPendingOrder(input) {
+  async createPendingOrder(input, { lookupTokenHash } = {}) {
     const validated = validatePendingOrderInput(input, this.productCatalog);
     if (typeof input.wompi_reference !== "string" || !input.wompi_reference.trim()) {
       throw new TypeError("wompi_reference es obligatorio.");
+    }
+    if (lookupTokenHash !== undefined && !LOOKUP_HASH_PATTERN.test(lookupTokenHash)) {
+      throw new TypeError("Hash de consulta inválido.");
     }
 
     const now = this.clock().toISOString();
@@ -46,10 +50,13 @@ class OrderService {
       items: validated.items,
       amount_in_cents: validated.amount_in_cents,
       currency: validated.currency,
+      environment: input.environment || "sandbox",
+      fulfillment_status: input.fulfillment_status || "RECEIVED",
       created_at: now,
       updated_at: now,
     };
 
+    if (lookupTokenHash) order.lookup_token_hash = lookupTokenHash;
     if (validated.customer !== undefined) order.customer = validated.customer;
     return this.sanitizeOrderForResponse(await this.repository.create(order));
   }
@@ -58,6 +65,17 @@ class OrderService {
     if (typeof reference !== "string" || !reference.trim()) return undefined;
     const order = await this.repository.findByReference(reference);
     return order ? this.sanitizeOrderForResponse(order) : undefined;
+  }
+
+  async getOrderByNumber(number) {
+    if (typeof number !== "string" || !/^[A-Za-z0-9-]{4,80}$/.test(number)) return undefined;
+    return this.repository.findByOrderNumber(number);
+  }
+
+  async getPublicOrderByNumberAndToken(number, token) {
+    const order = await this.getOrderByNumber(number);
+    if (!order || !verifyLookupToken(token, order.lookup_token_hash)) return undefined;
+    return this.sanitizeOrderForTracking(order);
   }
 
   async isTransactionAlreadyProcessed(transactionId) {
@@ -101,6 +119,9 @@ class OrderService {
       updated_at: this.clock().toISOString(),
       transaction_id: validated.id,
     };
+    if (nextStatus === ORDER_STATUSES.APPROVED && !order.paid_at) {
+      updated.paid_at = updated.updated_at;
+    }
     await this.repository.update(updated);
     await this.repository.recordTransaction(validated.id, order.wompi_reference);
     return this.sanitizeOrderForResponse(updated);
@@ -140,8 +161,28 @@ class OrderService {
       })),
       amount_in_cents: order.amount_in_cents,
       currency: order.currency,
+      environment: order.environment,
+      fulfillment_status: order.fulfillment_status,
+      paid_at: order.paid_at,
       created_at: order.created_at,
       updated_at: order.updated_at,
+    };
+  }
+
+  sanitizeOrderForTracking(order) {
+    return {
+      order_number: order.order_number,
+      payment_status: order.status,
+      fulfillment_status: order.fulfillment_status,
+      amount_in_cents: order.amount_in_cents,
+      currency: order.currency,
+      items: order.items.map(({ name, size, quantity }) => ({
+        product_name: name,
+        size,
+        quantity,
+      })),
+      created_at: order.created_at,
+      paid_at: order.paid_at || null,
     };
   }
 }

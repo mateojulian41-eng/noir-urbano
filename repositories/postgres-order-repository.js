@@ -23,6 +23,10 @@ function mapOrder(rows) {
     items,
     amount_in_cents: first.amount_in_cents,
     currency: first.currency,
+    environment: first.environment,
+    lookup_token_hash: first.lookup_token_hash,
+    fulfillment_status: first.fulfillment_status,
+    paid_at: first.paid_at,
     created_at: first.created_at,
     updated_at: first.updated_at,
   };
@@ -68,12 +72,16 @@ class PostgresOrderRepository extends OrderRepository {
     const sql = this.getClient();
     const orderQuery = sql`
       INSERT INTO orders
-        (id, order_number, wompi_reference, status, amount_in_cents, currency, created_at, updated_at)
+        (id, order_number, wompi_reference, status, amount_in_cents, currency,
+         environment, lookup_token_hash, fulfillment_status, created_at, updated_at)
       VALUES
         (${order.id}, ${order.order_number}, ${order.wompi_reference}, ${order.status},
-         ${order.amount_in_cents}, ${order.currency}, ${order.created_at}, ${order.updated_at})
+         ${order.amount_in_cents}, ${order.currency}, ${order.environment},
+         ${order.lookup_token_hash || null}, ${order.fulfillment_status},
+         ${order.created_at}, ${order.updated_at})
       RETURNING id, order_number, wompi_reference, transaction_id, status,
-        amount_in_cents, currency, created_at, updated_at
+        amount_in_cents, currency, environment, lookup_token_hash,
+        fulfillment_status, paid_at, created_at, updated_at
     `;
     const itemQueries = order.items.map((item) => sql`
       INSERT INTO order_items
@@ -105,22 +113,39 @@ class PostgresOrderRepository extends OrderRepository {
     return this.findOne("transaction_id", transactionId);
   }
 
+  async findByOrderNumber(orderNumber) {
+    return this.findOne("order_number", orderNumber);
+  }
+
   async findOne(column, value) {
     const sql = this.getClient();
     try {
       const result = column === "wompi_reference"
         ? await sql`
             SELECT o.id, o.order_number, o.wompi_reference, o.transaction_id, o.status,
-              o.amount_in_cents, o.currency, o.created_at, o.updated_at,
+              o.amount_in_cents, o.currency, o.environment, o.lookup_token_hash,
+              o.fulfillment_status, o.paid_at, o.created_at, o.updated_at,
               i.id AS item_id, i.product_name AS item_name, i.size AS item_size,
               i.quantity AS item_quantity, i.unit_price_in_cents AS item_unit_amount_in_cents
             FROM orders o LEFT JOIN order_items i ON i.order_id = o.id
             WHERE o.wompi_reference = ${value}
             ORDER BY i.id
           `
-        : await sql`
+        : column === "order_number"
+          ? await sql`
             SELECT o.id, o.order_number, o.wompi_reference, o.transaction_id, o.status,
-              o.amount_in_cents, o.currency, o.created_at, o.updated_at,
+              o.amount_in_cents, o.currency, o.environment, o.lookup_token_hash,
+              o.fulfillment_status, o.paid_at, o.created_at, o.updated_at,
+              i.id AS item_id, i.product_name AS item_name, i.size AS item_size,
+              i.quantity AS item_quantity, i.unit_price_in_cents AS item_unit_amount_in_cents
+            FROM orders o LEFT JOIN order_items i ON i.order_id = o.id
+            WHERE o.order_number = ${value}
+            ORDER BY i.id
+          `
+          : await sql`
+            SELECT o.id, o.order_number, o.wompi_reference, o.transaction_id, o.status,
+              o.amount_in_cents, o.currency, o.environment, o.lookup_token_hash,
+              o.fulfillment_status, o.paid_at, o.created_at, o.updated_at,
               i.id AS item_id, i.product_name AS item_name, i.size AS item_size,
               i.quantity AS item_quantity, i.unit_price_in_cents AS item_unit_amount_in_cents
             FROM orders o LEFT JOIN order_items i ON i.order_id = o.id
@@ -138,10 +163,12 @@ class PostgresOrderRepository extends OrderRepository {
     try {
       const result = await sql`
         UPDATE orders
-        SET transaction_id = ${order.transaction_id || null}, status = ${order.status}
+        SET transaction_id = ${order.transaction_id || null}, status = ${order.status},
+          paid_at = COALESCE(orders.paid_at, ${order.paid_at || null})
         WHERE wompi_reference = ${order.wompi_reference}
         RETURNING id, order_number, wompi_reference, transaction_id, status,
-          amount_in_cents, currency, created_at, updated_at
+          amount_in_cents, currency, environment, lookup_token_hash,
+          fulfillment_status, paid_at, created_at, updated_at
       `;
       if (result.length === 0) throw new Error("Orden no encontrada.");
       return { ...order, ...result[0] };
