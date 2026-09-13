@@ -137,7 +137,7 @@ module.exports = async function handler(req, res) {
   const event = payload.event;
   const transaction = payload.data?.transaction;
 
-  // Aquí puedes agregar lógica: guardar en DB, enviar email, etc.
+  // Integración futura: pasar una transacción normalizada al OrderService y a su repositorio.
   console.log(`[Wompi Webhook] Evento: ${event} | Ref: ${transaction?.reference} | Status: ${transaction?.status}`);
 
   res.statusCode = 200;
