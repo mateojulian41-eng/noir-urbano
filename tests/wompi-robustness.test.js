@@ -145,6 +145,40 @@ function makeScriptEnvironment({ search = '', fetchImpl = async () => ({ ok: tru
     },
   };
 
+  const trackingPanel = { hidden: true };
+  const trackingAccessNote = { hidden: true };
+  const trackingResult = {
+    hidden: true,
+    textContent: '',
+    replaceChildren() {},
+    append() {},
+  };
+  const trackingForm = {
+    elements: {
+      order_number: { value: '', required: true },
+      token: { value: '', required: true },
+    },
+    reset() {
+      this.elements.order_number.value = '';
+      this.elements.token.value = '';
+    },
+    addEventListener(event, handler) {
+      if (event === 'submit') this._handler = handler;
+    },
+  };
+  const trackingOpen = {
+    addEventListener(event, handler) { this._handler = handler; },
+    click() { if (this._handler) this._handler(); },
+  };
+  const trackingClose = {
+    addEventListener(event, handler) { this._handler = handler; },
+    click() { if (this._handler) this._handler(); },
+  };
+  const trackingClear = {
+    addEventListener(event, handler) { this._handler = handler; },
+    click() { if (this._handler) this._handler(); },
+  };
+
   const document = {
     body: {
       classList: {
@@ -166,6 +200,13 @@ function makeScriptEnvironment({ search = '', fetchImpl = async () => ({ ok: tru
       if (selector === '[data-payment-status-title]') return paymentStatusTitle;
       if (selector === '[data-payment-status-copy]') return paymentStatusCopy;
       if (selector === '[data-payment-status-close]') return paymentStatusClose;
+      if (selector === '[data-order-tracking]') return trackingPanel;
+      if (selector === '[data-tracking-form]') return trackingForm;
+      if (selector === '[data-tracking-result]') return trackingResult;
+      if (selector === '[data-tracking-access-note]') return trackingAccessNote;
+      if (selector === '[data-tracking-open]') return trackingOpen;
+      if (selector === '[data-tracking-close]') return trackingClose;
+      if (selector === '[data-tracking-clear]') return trackingClear;
       if (selector === '[data-featured-add]') return { dataset: { name: 'SHADOW PALM TEE', price: '150000' }, addEventListener() {} };
       return null;
     },
@@ -202,6 +243,14 @@ function makeScriptEnvironment({ search = '', fetchImpl = async () => ({ ok: tru
     localStorage,
     URL,
     URLSearchParams,
+    FormData: class {
+      constructor(form) {
+        this.form = form;
+      }
+      get(name) {
+        return this.form.elements[name]?.value || '';
+      }
+    },
     Intl,
     setTimeout: (fn) => { fn(); return 0; },
     clearTimeout() {},
@@ -561,4 +610,55 @@ test('script: conserva el carrito cuando Wompi devuelve DECLINED y limpia URL', 
   const storageValue = context.localStorage.getItem('noir-urbano-cart');
   assert.ok(storageValue.includes('SHADOW PALM TEE'));
   assert.ok(storageValue.includes('"quantity":1'));
+});
+
+test('script: restaura y usa el token local sin mostrarlo, y borra ambos datos', async () => {
+  const access = JSON.stringify({ order_number: 'NU-TRACK-001', lookup_token: 'token-local-no-visible' });
+  const calls = [];
+  const context = makeScriptEnvironment({
+    initialStorage: { noir_urbano_order_access: access },
+    fetchImpl: async (url) => {
+      calls.push(url);
+      return {
+        ok: true,
+        json: async () => ({
+          order_number: 'NU-TRACK-001',
+          payment_status: 'APPROVED',
+          fulfillment_status: 'RECEIVED',
+          amount_in_cents: 15000000,
+          currency: 'COP',
+          items: [{ product_name: 'SHADOW PALM TEE', size: 'M', quantity: 1 }],
+          created_at: '2026-09-13T00:00:00.000Z',
+          paid_at: null,
+        }),
+      };
+    },
+  });
+  const scriptSource = fs.readFileSync(path.join(projectRoot, 'script.js'), 'utf8');
+  vm.runInNewContext(scriptSource, context);
+
+  const trackingOpen = context.document.querySelector('[data-tracking-open]');
+  const trackingForm = context.document.querySelector('[data-tracking-form]');
+  const trackingPanel = context.document.querySelector('[data-order-tracking]');
+  const trackingNote = context.document.querySelector('[data-tracking-access-note]');
+  trackingOpen.click();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(trackingForm.elements.order_number.value, 'NU-TRACK-001');
+  assert.equal(trackingForm.elements.token.value, '');
+  assert.equal(trackingForm.elements.token.required, false);
+  assert.equal(trackingNote.hidden, false);
+  assert.equal(trackingPanel.hidden, false);
+  assert.match(calls[0], /order_number=NU-TRACK-001/);
+  assert.match(calls[0], /token=token-local-no-visible/);
+  assert.equal(context.window.location.href.includes('token-local-no-visible'), false);
+
+  context.document.querySelector('[data-tracking-close]').click();
+  assert.equal(context.localStorage.getItem('noir_urbano_order_access'), access);
+
+  context.document.querySelector('[data-tracking-clear]').click();
+  assert.equal(context.localStorage.getItem('noir_urbano_order_access'), null);
+  assert.equal(trackingForm.elements.order_number.value, '');
+  assert.equal(trackingForm.elements.token.value, '');
+  assert.equal(trackingForm.elements.token.required, true);
 });
