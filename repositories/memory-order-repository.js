@@ -8,6 +8,7 @@ class MemoryOrderRepository extends OrderRepository {
   constructor() {
     super();
     this.ordersByReference = new Map();
+    this.ordersByNumber = new Map();
     this.transactions = new Map();
   }
 
@@ -16,6 +17,7 @@ class MemoryOrderRepository extends OrderRepository {
       throw new Error("La referencia Wompi ya existe.");
     }
     this.ordersByReference.set(order.wompi_reference, clone(order));
+    this.ordersByNumber.set(order.order_number, clone(order));
     return clone(order);
   }
 
@@ -28,6 +30,10 @@ class MemoryOrderRepository extends OrderRepository {
     return reference ? this.findByReference(reference) : undefined;
   }
 
+  async findByOrderNumber(orderNumber) {
+    return clone(this.ordersByNumber.get(orderNumber));
+  }
+
   async isTransactionProcessed(transactionId) {
     return this.transactions.has(transactionId);
   }
@@ -37,6 +43,7 @@ class MemoryOrderRepository extends OrderRepository {
       throw new Error("La orden no existe.");
     }
     this.ordersByReference.set(order.wompi_reference, clone(order));
+    this.ordersByNumber.set(order.order_number, clone(order));
     return clone(order);
   }
 

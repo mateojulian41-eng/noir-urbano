@@ -36,10 +36,14 @@ https://noir-urbano.vercel.app
 ```text
 .
 ├── api/
+│   ├── order-status.js         # Consulta pública con número y token
 │   ├── wompi-checkout.js       # Valida pedidos y crea la URL firmada de checkout
 │   ├── wompi-transaction.js    # Consulta una transacción en Wompi
 │   └── wompi-webhook.js        # Valida eventos recibidos desde Wompi
 ├── assets/                     # Imágenes y recursos visuales de la tienda
+├── domain/orders/               # Estados, validación y acceso seguro de pedidos
+├── migrations/                  # SQL versionado, no ejecutado automáticamente
+├── repositories/                # Memoria y PostgreSQL intercambiables
 ├── .env.example                # Plantilla local de variables de entorno
 ├── .gitignore                  # Exclusiones, incluido .env
 ├── index.html                  # Marcado principal de la tienda
@@ -116,6 +120,15 @@ El secreto de integridad no se expone al navegador. La llave pública puede
 formar parte de la URL del checkout, pero las llaves privadas y los secretos
 siempre deben procesarse del lado del servidor.
 
+## Seguimiento de pedidos
+
+Después de crear un pedido, el comprador recibe un número de orden y un token
+de consulta de un solo uso para ese acceso inicial. El token permanece local al
+dispositivo y PostgreSQL guarda únicamente su hash SHA-256. La consulta pública
+usa `GET /api/order-status` y devuelve solo el estado de pago, el estado
+operativo, productos, total y fechas sanitizadas. No incluyas tokens reales en
+ejemplos, documentación ni registros.
+
 ## Flujo de pago
 
 1. El cliente agrega productos y tallas al carrito.
@@ -128,6 +141,10 @@ siempre deben procesarse del lado del servidor.
 	 transacción y muestra el estado traducido.
 7. Los eventos enviados a `POST /api/wompi-webhook` se verifican antes de
 	 aceptar cualquier procesamiento adicional.
+
+El seguimiento público requiere aplicar manualmente la migración versionada de
+`migrations/002_secure_order_tracking.sql` en la base de datos correspondiente.
+No se ejecuta automáticamente desde la aplicación.
 
 ## Despliegue en Vercel
 

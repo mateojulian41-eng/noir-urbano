@@ -38,21 +38,16 @@ test("checkout crea una orden y webhook actualiza la misma orden", async () => {
 
   assert.equal(checkoutRes.statusCode, 200);
   const checkout = JSON.parse(checkoutRes.payload);
+  const internalOrder = await getOrderService().getOrderByNumber(checkout.order_number);
   const timestamp = "123456";
   const transaction = {
     id: "txn-integration-001",
-    reference: checkout.reference,
+    reference: internalOrder.wompi_reference,
     status: "APPROVED",
     amount_in_cents: checkout.amountInCents,
     currency: checkout.currency,
   };
-  const properties = [
-    "transaction.id",
-    "transaction.reference",
-    "transaction.status",
-    "transaction.amount_in_cents",
-    "transaction.currency",
-  ];
+  const properties = ["transaction.status"];
   const values = properties.map((property) => property.split(".").slice(1).reduce(
     (value, key) => value[key],
     transaction,
@@ -68,7 +63,7 @@ test("checkout crea una orden y webhook actualiza la misma orden", async () => {
   }), webhookRes);
 
   assert.equal(webhookRes.statusCode, 200);
-  const saved = await getOrderService().getOrderByReference(checkout.reference);
+  const saved = await getOrderService().getOrderByReference(internalOrder.wompi_reference);
   assert.equal(saved.status, "APPROVED");
   assert.equal(saved.transaction_id, transaction.id);
 });

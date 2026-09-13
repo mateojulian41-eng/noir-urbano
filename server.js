@@ -6,6 +6,7 @@ const path = require("path");
 const checkoutHandler = require("./api/wompi-checkout");
 const transactionHandler = require("./api/wompi-transaction");
 const webhookHandler = require("./api/wompi-webhook");
+const orderStatusHandler = require("./api/order-status");
 
 const root = __dirname;
 const port = Number(process.env.PORT || 4173);
@@ -106,6 +107,11 @@ const server = http.createServer((req, res) => {
 
   if (pathname === "/api/wompi-webhook") {
     runApi(webhookHandler, req, res);
+    return;
+  }
+
+  if (pathname === "/api/order-status") {
+    runApi(orderStatusHandler, req, res);
     return;
   }
 

@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const { getOrderService } = require("../domain/orders/order-runtime");
+const { generateLookupToken, hashLookupToken } = require("../domain/orders/order-access");
 
 const ALLOWED_PRODUCTS = {
   "SHADOW PALM TEE": 150000,
@@ -107,14 +108,16 @@ module.exports = async function handler(req, res) {
   const amountInCents = total * 100;
   const currency = "COP";
   const reference = `NOIR-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+  const lookupToken = generateLookupToken();
+  let createdOrder;
 
   try {
-    await getOrderService().createPendingOrder({
+    createdOrder = await getOrderService().createPendingOrder({
       wompi_reference: reference,
       currency: "COP",
       items: order.items.map(({ name, size, quantity }) => ({ name, size, quantity })),
       amount_in_cents: amountInCents,
-    });
+    }, { lookupTokenHash: hashLookupToken(lookupToken) });
   } catch (error) {
     res.statusCode = 503;
     res.setHeader("Content-Type", "application/json");
@@ -149,7 +152,8 @@ module.exports = async function handler(req, res) {
   res.end(
     JSON.stringify({
       checkoutUrl,
-      reference,
+      order_number: createdOrder.order_number,
+      lookup_token: lookupToken,
       amountInCents,
       currency,
       publicKey,

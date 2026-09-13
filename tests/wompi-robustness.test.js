@@ -265,7 +265,10 @@ test('checkout: ignora precios del cliente y calcula monto exclusivamente del se
   assert.equal(payload.amountInCents, 300000 * 100);
   assert.equal(payload.currency, 'COP');
   assert.ok(payload.checkoutUrl.includes('signature') || payload.checkoutUrl.includes('signature%3Aintegrity'));
-  assert.ok(payload.reference.startsWith('NOIR-'));
+  assert.match(payload.order_number, /^NU-/);
+  assert.equal(typeof payload.lookup_token, 'string');
+  assert.equal('lookup_token_hash' in payload, false);
+  assert.equal('reference' in payload, false);
 });
 
 test('checkout: valida tallas y cantidades inválidas', async () => {

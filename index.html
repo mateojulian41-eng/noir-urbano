@@ -31,6 +31,7 @@
         <button class="cart-link" type="button" data-cart-toggle>
           CARRITO <span data-cart-count>0</span>
         </button>
+        <button class="cart-link" type="button" data-tracking-open>SEGUIR PEDIDO</button>
       </nav>
     </header>
 
@@ -39,6 +40,25 @@
       <span data-payment-status-copy>Consultando estado de la transaccion.</span>
       <button class="payment-status-close" type="button" data-payment-status-close aria-label="Cerrar aviso de pago">Cerrar</button>
     </div>
+
+    <section class="order-tracking" data-order-tracking aria-live="polite" hidden>
+      <div class="tracking-panel">
+        <div class="tracking-head">
+          <div>
+            <p class="kicker">Seguimiento seguro</p>
+            <h2>Tu pedido</h2>
+          </div>
+          <button class="icon-button" type="button" data-tracking-close aria-label="Cerrar seguimiento">x</button>
+        </div>
+        <form class="tracking-form" data-tracking-form>
+          <label>Número de pedido<input name="order_number" maxlength="80" autocomplete="off" required /></label>
+          <label>Token de acceso<input name="token" type="password" maxlength="128" autocomplete="off" required /></label>
+          <button class="btn btn-secondary" type="submit">CONSULTAR PEDIDO</button>
+        </form>
+        <div class="tracking-result" data-tracking-result hidden></div>
+        <button class="tracking-clear" type="button" data-tracking-clear>BORRAR ACCESO LOCAL</button>
+      </div>
+    </section>
 
     <main id="top">
       <section class="hero section-dark" aria-label="Campaña NOIR URBANO">

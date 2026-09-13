@@ -3,6 +3,7 @@ const currency = new Intl.NumberFormat("es-CO", {
 });
 
 const CART_STORAGE_KEY = "noir-urbano-cart";
+const ORDER_ACCESS_STORAGE_KEY = "noir_urbano_order_access";
 const cart = new Map();
 
 function hydrateCartFromStorage() {
@@ -46,6 +47,12 @@ const sizeOptions = document.querySelectorAll("[data-size-option]");
 const featuredAddButton = document.querySelector("[data-featured-add]");
 const checkoutButton = document.querySelector("[data-checkout-button]");
 const checkoutNote = document.querySelector("[data-checkout-note]");
+const trackingPanel = document.querySelector("[data-order-tracking]");
+const trackingForm = document.querySelector("[data-tracking-form]");
+const trackingResult = document.querySelector("[data-tracking-result]");
+const trackingOpen = document.querySelector("[data-tracking-open]");
+const trackingClose = document.querySelector("[data-tracking-close]");
+const trackingClear = document.querySelector("[data-tracking-clear]");
 const paymentStatus = document.querySelector("[data-payment-status]");
 const paymentStatusTitle = document.querySelector(
   "[data-payment-status-title]",
@@ -240,6 +247,106 @@ function clearPaymentStatus() {
   paymentStatus.hidden = true;
 }
 
+function readOrderAccess() {
+  try {
+    const access = JSON.parse(localStorage.getItem(ORDER_ACCESS_STORAGE_KEY) || "null");
+    return access?.order_number && access?.lookup_token ? access : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveOrderAccess(access) {
+  if (!access?.order_number || !access?.lookup_token) return;
+  localStorage.setItem(ORDER_ACCESS_STORAGE_KEY, JSON.stringify({
+    order_number: access.order_number,
+    lookup_token: access.lookup_token,
+  }));
+}
+
+function clearOrderAccess() {
+  localStorage.removeItem(ORDER_ACCESS_STORAGE_KEY);
+  if (trackingForm) trackingForm.reset();
+  if (trackingResult) {
+    trackingResult.hidden = true;
+    trackingResult.textContent = "";
+  }
+}
+
+function openOrderTracking() {
+  if (!trackingPanel) return;
+  trackingPanel.hidden = false;
+  const access = readOrderAccess();
+  const numberInput = trackingForm?.elements?.order_number;
+  if (numberInput && access) numberInput.value = access.order_number;
+}
+
+function closeOrderTracking() {
+  if (trackingPanel) trackingPanel.hidden = true;
+}
+
+const paymentLabels = {
+  PENDING_PAYMENT: "Pago pendiente",
+  APPROVED: "Pago aprobado",
+  DECLINED: "Pago rechazado",
+  VOIDED: "Pago anulado",
+  ERROR: "Error en el pago",
+};
+
+const fulfillmentLabels = {
+  RECEIVED: "Pedido recibido",
+  PREPARING: "Preparando pedido",
+  SHIPPED: "Pedido enviado",
+  DELIVERED: "Pedido entregado",
+  CANCELLED: "Pedido cancelado",
+};
+
+function renderTrackingResult(order) {
+  if (!trackingResult) return;
+  trackingResult.replaceChildren();
+  const heading = document.createElement("h3");
+  heading.textContent = order.order_number;
+  const status = document.createElement("p");
+  status.textContent = `${paymentLabels[order.payment_status] || "Estado de pago"} / ${fulfillmentLabels[order.fulfillment_status] || "Estado operativo"}`;
+  const total = document.createElement("p");
+  total.textContent = `Total: ${formatPrice(order.amount_in_cents / 100)}`;
+  const date = document.createElement("p");
+  date.textContent = `Fecha: ${new Date(order.created_at).toLocaleDateString("es-CO")}`;
+  const items = document.createElement("ul");
+  for (const item of order.items || []) {
+    const line = document.createElement("li");
+    line.textContent = `${item.product_name} / Talla ${item.size} / Cantidad ${item.quantity}`;
+    items.append(line);
+  }
+  trackingResult.append(heading, status, items, total, date);
+  trackingResult.hidden = false;
+}
+
+async function requestOrderStatus(orderNumber, token) {
+  const response = await fetch(`/api/order-status?order_number=${encodeURIComponent(orderNumber)}&token=${encodeURIComponent(token)}`);
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || "No se pudo consultar el pedido.");
+  return payload;
+}
+
+async function submitOrderTracking(event) {
+  event.preventDefault();
+  const formData = new FormData(trackingForm);
+  const orderNumber = String(formData.get("order_number") || "").trim();
+  const token = String(formData.get("token") || "").trim();
+  try {
+    const order = await requestOrderStatus(orderNumber, token);
+    saveOrderAccess({ order_number: orderNumber, lookup_token: token });
+    renderTrackingResult(order);
+    trackingForm.elements.token.value = "";
+  } catch (error) {
+    if (trackingResult) {
+      trackingResult.textContent = error.message;
+      trackingResult.hidden = false;
+    }
+  }
+}
+
 function clearPaymentParams() {
   const url = new URL(window.location.href);
   url.searchParams.delete("id");
@@ -301,6 +408,7 @@ async function startCheckout() {
 
   try {
     const checkoutData = await requestWompiCheckout(order);
+    saveOrderAccess(checkoutData);
     openWompiCheckout(checkoutData);
     checkoutNote.textContent = "Pago seguro preparado con Wompi.";
   } catch (error) {
@@ -394,6 +502,10 @@ document.addEventListener("keydown", (event) => {
 
 checkoutButton.addEventListener("click", startCheckout);
 paymentStatusClose.addEventListener("click", clearPaymentStatus);
+trackingOpen?.addEventListener("click", openOrderTracking);
+trackingClose?.addEventListener("click", closeOrderTracking);
+trackingClear?.addEventListener("click", clearOrderAccess);
+trackingForm?.addEventListener("submit", submitOrderTracking);
 
 const observer = new IntersectionObserver(
   (entries) => {
