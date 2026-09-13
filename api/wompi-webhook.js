@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { getOrderService } = require("../domain/orders/order-runtime");
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -137,7 +138,26 @@ module.exports = async function handler(req, res) {
   const event = payload.event;
   const transaction = payload.data?.transaction;
 
-  // Integración futura: pasar una transacción normalizada al OrderService y a su repositorio.
+  if (
+    transaction &&
+    typeof transaction.id === "string" &&
+    typeof transaction.reference === "string" &&
+    typeof transaction.status === "string" &&
+    Number.isInteger(transaction.amount_in_cents) &&
+    typeof transaction.currency === "string"
+  ) {
+    try {
+      await getOrderService().processWebhookEvent(payload);
+    } catch (error) {
+      if (error.message !== "Orden no encontrada.") {
+        res.statusCode = 503;
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ error: "No se pudo procesar el evento." }));
+        return;
+      }
+    }
+  }
+
   console.log(`[Wompi Webhook] Evento: ${event} | Ref: ${transaction?.reference} | Status: ${transaction?.status}`);
 
   res.statusCode = 200;
