@@ -61,6 +61,9 @@ class OrderService {
 
   async isTransactionAlreadyProcessed(transactionId) {
     if (typeof transactionId !== "string" || !transactionId.trim()) return false;
+    if (typeof this.repository.isTransactionProcessed === "function") {
+      return this.repository.isTransactionProcessed(transactionId);
+    }
     return Boolean(await this.repository.findByTransactionId(transactionId));
   }
 
