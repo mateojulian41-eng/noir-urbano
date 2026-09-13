@@ -11,6 +11,10 @@ class OrderRepository {
     throw new Error("OrderRepository.findByTransactionId debe ser implementado.");
   }
 
+  async isTransactionProcessed() {
+    throw new Error("OrderRepository.isTransactionProcessed debe ser implementado.");
+  }
+
   async update() {
     throw new Error("OrderRepository.update debe ser implementado.");
   }

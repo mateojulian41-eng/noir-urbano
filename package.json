@@ -6,12 +6,16 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node --test",
-    "check": "node --check script.js && node --check server.js && node --check api/wompi-checkout.js && node --check api/wompi-transaction.js && node --check api/wompi-webhook.js"
+    "test": "node --test tests",
+    "smoke:db": "node scripts/db-smoke-test.js",
+    "check": "node --check script.js && node --check server.js && node --check api/wompi-checkout.js && node --check api/wompi-transaction.js && node --check api/wompi-webhook.js && node --check scripts/db-smoke-test.js"
   },
   "engines": {
     "node": ">=18"
   },
   "license": "UNLICENSED",
-  "private": true
+  "private": true,
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0"
+  }
 }

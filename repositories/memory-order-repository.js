@@ -28,6 +28,10 @@ class MemoryOrderRepository extends OrderRepository {
     return reference ? this.findByReference(reference) : undefined;
   }
 
+  async isTransactionProcessed(transactionId) {
+    return this.transactions.has(transactionId);
+  }
+
   async update(order) {
     if (!this.ordersByReference.has(order.wompi_reference)) {
       throw new Error("La orden no existe.");
