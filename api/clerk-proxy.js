@@ -1,6 +1,5 @@
 const ALLOWED_METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
-const DEFAULT_PROXY_URL = "https://noir-urbano.vercel.app/__clerk";
 const OFFICIAL_FAPI_HOSTS = new Set(["frontend-api.clerk.dev", "frontend-api.clerk.com"]);
 
 function sendJson(res, statusCode, payload) {
@@ -10,31 +9,51 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload));
 }
 
-function getProxyUrl() {
-  const value = String(process.env.CLERK_PROXY_URL || DEFAULT_PROXY_URL).trim();
+function normalizeUrl(value) {
   try {
     const url = new URL(value);
-    if (url.protocol !== "https:" || url.hostname !== "noir-urbano.vercel.app" || url.pathname !== "/__clerk" || url.search || url.hash || url.username || url.password) return undefined;
+    url.pathname = url.pathname.replace(/\/+$/, "") || "/";
     return url;
   } catch {
     return undefined;
   }
 }
 
-function getFrontendApiUrl() {
-  const value = String(process.env.CLERK_FRONTEND_API_URL || "").trim();
-  if (!value) return undefined;
-  let url;
-  try {
-    url = new URL(value);
-  } catch {
-    return undefined;
+function getConfiguration(env = process.env) {
+  if (!env || typeof env !== "object") {
+    return { category: "unknown_configuration", proxyUrlPresent: false, secretPresent: false, upstreamPresent: false };
   }
-  const proxyUrl = getProxyUrl();
-  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || url.pathname !== "/" || url.port) return undefined;
-  if (!OFFICIAL_FAPI_HOSTS.has(url.hostname) && !url.hostname.endsWith(".clerk.accounts.dev")) return undefined;
-  if (url.hostname === "noir-urbano.vercel.app" || (proxyUrl && url.origin === proxyUrl.origin)) return undefined;
-  return url;
+  const proxyValue = String(env.CLERK_PROXY_URL || "").trim();
+  const secretValue = String(env.CLERK_SECRET_KEY || "").trim();
+  const upstreamValue = String(env.CLERK_FRONTEND_API_URL || "").trim();
+  const presence = {
+    proxyUrlPresent: Boolean(proxyValue),
+    secretPresent: Boolean(secretValue),
+    upstreamPresent: Boolean(upstreamValue),
+  };
+  if (!presence.proxyUrlPresent) return { category: "proxy_url_missing", ...presence };
+  if (!presence.secretPresent) return { category: "secret_missing", ...presence };
+  if (!presence.upstreamPresent) return { category: "upstream_missing", ...presence };
+
+  const proxyUrl = normalizeUrl(proxyValue);
+  if (!proxyUrl || proxyUrl.protocol !== "https:" || proxyUrl.hostname !== "noir-urbano.vercel.app" || proxyUrl.pathname !== "/__clerk" || proxyUrl.search || proxyUrl.hash || proxyUrl.username || proxyUrl.password || proxyUrl.port) {
+    return { category: "proxy_url_invalid", ...presence };
+  }
+
+  const upstreamUrl = normalizeUrl(upstreamValue);
+  if (upstreamUrl && upstreamUrl.origin === proxyUrl.origin) {
+    return { category: "upstream_cycle", ...presence };
+  }
+  if (!upstreamUrl || upstreamUrl.protocol !== "https:" || upstreamUrl.username || upstreamUrl.password || upstreamUrl.search || upstreamUrl.hash || upstreamUrl.pathname !== "/" || upstreamUrl.port) {
+    return { category: "upstream_invalid", ...presence };
+  }
+  if (upstreamUrl.hostname === "noir-urbano.vercel.app") {
+    return { category: "upstream_cycle", ...presence };
+  }
+  if (!OFFICIAL_FAPI_HOSTS.has(upstreamUrl.hostname) && !upstreamUrl.hostname.endsWith(".clerk.accounts.dev")) {
+    return { category: "upstream_invalid", ...presence };
+  }
+  return { category: "configuration_valid", ...presence, proxyUrl, upstreamUrl, secretValue };
 }
 
 function getProxyPath(req) {
@@ -72,10 +91,14 @@ module.exports = async function handler(req, res) {
     sendJson(res, 405, { error: "Method not allowed" });
     return;
   }
-  const frontendApiUrl = getFrontendApiUrl();
-  const proxyUrl = getProxyUrl();
-  const secretKey = String(process.env.CLERK_SECRET_KEY || "").trim();
-  if (!frontendApiUrl || !proxyUrl || !secretKey) {
+  const configuration = getConfiguration();
+  if (configuration.category !== "configuration_valid") {
+    console.info("[clerk-proxy] configuration", {
+      category: configuration.category,
+      proxyUrlPresent: configuration.proxyUrlPresent,
+      secretPresent: configuration.secretPresent,
+      upstreamPresent: configuration.upstreamPresent,
+    });
     sendJson(res, 503, { error: "Proxy de autenticación no disponible." });
     return;
   }
@@ -89,11 +112,11 @@ module.exports = async function handler(req, res) {
   }
 
   const incomingUrl = new URL(req.url, "https://noir-urbano.vercel.app");
-  const upstreamUrl = new URL(getProxyPath(req), frontendApiUrl);
+  const upstreamUrl = new URL(getProxyPath(req), configuration.upstreamUrl);
   upstreamUrl.search = incomingUrl.search;
   const headers = getForwardHeaders(req);
-  headers.set("clerk-proxy-url", proxyUrl.toString());
-  headers.set("clerk-secret-key", secretKey);
+  headers.set("clerk-proxy-url", configuration.proxyUrl.toString());
+  headers.set("clerk-secret-key", configuration.secretValue);
 
   try {
     const upstream = await fetch(upstreamUrl, {
@@ -119,7 +142,7 @@ module.exports = async function handler(req, res) {
   }
 };
 
-module.exports.getFrontendApiUrl = getFrontendApiUrl;
-module.exports.getProxyUrl = getProxyUrl;
+module.exports.getConfiguration = getConfiguration;
+module.exports.normalizeUrl = normalizeUrl;
 module.exports.getProxyPath = getProxyPath;
 module.exports.MAX_BODY_BYTES = MAX_BODY_BYTES;
