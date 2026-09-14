@@ -54,8 +54,17 @@ async function api(path, options = {}) {
 }
 
 function renderHistory(history) {
-  if (!history?.length) return "Sin cambios registrados";
-  return history.map((entry) => `${escapeText(STATUS_LABELS[entry.previous_status] || entry.previous_status)} -> ${escapeText(STATUS_LABELS[entry.new_status] || entry.new_status)} · ${new Date(entry.created_at).toLocaleString("es-CO")}`).join("<br>");
+  const entries = Array.isArray(history) ? history : [];
+  if (!entries.length) return "Sin cambios registrados";
+  return entries.map((entry) => `${escapeText(STATUS_LABELS[entry.previous_status] || entry.previous_status)} -> ${escapeText(STATUS_LABELS[entry.new_status] || entry.new_status)} · ${new Date(entry.created_at).toLocaleString("es-CO")}`).join("<br>");
+}
+
+function isExactOrderNumber(value) {
+  return /^NU-[0-9]{14}-[A-Z0-9]{6}$/.test(value);
+}
+
+async function loadOrderDetail(orderNumber) {
+  return api(`/api/admin/order?order_number=${encodeURIComponent(orderNumber)}`);
 }
 
 function renderOrder(order, history = []) {
@@ -74,7 +83,8 @@ function renderOrder(order, history = []) {
     const nextStatus = new FormData(event.currentTarget).get("status");
     try {
       const result = await api("/api/admin/order-status", { method: "PATCH", body: JSON.stringify({ order_number: order.order_number, fulfillment_status: nextStatus }) });
-      element.replaceWith(renderOrder(result.order, result.history));
+      const detail = Array.isArray(result.history) ? result : await loadOrderDetail(order.order_number);
+      element.replaceWith(renderOrder(detail.order, detail.history));
       setFeedback("Pedido actualizado.");
     } catch (error) { setFeedback(error.message, true); }
   });
@@ -84,6 +94,13 @@ function renderOrder(order, history = []) {
 async function loadOrders() {
   setFeedback("Cargando pedidos...");
   const params = new URLSearchParams(new FormData(filterForm));
+  const search = params.get("search")?.trim() || "";
+  if (isExactOrderNumber(search)) {
+    const detail = await loadOrderDetail(search);
+    ordersElement.replaceChildren(renderOrder(detail.order, detail.history));
+    setFeedback("1 pedido");
+    return;
+  }
   const result = await api(`/api/admin/orders?${params}`);
   ordersElement.replaceChildren(...result.orders.map((order) => renderOrder(order)));
   setFeedback(`${result.total} pedido${result.total === 1 ? "" : "s"}`);

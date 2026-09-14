@@ -106,9 +106,9 @@ class OrderService {
 
   async getAdminStatusHistory(orderNumber) {
     const history = await this.repository.getStatusHistory(orderNumber);
-    return history.map(({ previous_status, new_status, changed_by, created_at }) => ({
-      previous_status, new_status, changed_by, created_at,
-    }));
+    return history.map(({ previous_status, new_status, created_at }) => ({
+      previous_status, new_status, created_at,
+    })).sort((left, right) => new Date(left.created_at) - new Date(right.created_at));
   }
 
   async getPublicOrderByNumberAndToken(number, token) {

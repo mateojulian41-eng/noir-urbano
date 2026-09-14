@@ -48,7 +48,7 @@ test("admin puede listar, cambiar operación y consultar historial", async () =>
   const updated = await service.updateAdminFulfillmentStatus(order.order_number, "PREPARING", "user_admin");
   assert.equal(updated.fulfillment_status, "PREPARING");
   const history = await service.getAdminStatusHistory(order.order_number);
-  assert.deepEqual(history[0], { previous_status: "RECEIVED", new_status: "PREPARING", changed_by: "user_admin", created_at: "2026-01-02T03:04:05.000Z" });
+  assert.deepEqual(history[0], { previous_status: "RECEIVED", new_status: "PREPARING", created_at: "2026-01-02T03:04:05.000Z" });
   assert.equal("id" in updated, false);
   assert.equal("transaction_id" in updated, false);
   assert.equal("wompi_reference" in updated, false);
@@ -86,4 +86,56 @@ test("solo pedidos aprobados avanzan y las transiciones operativas válidas se c
   await service.updateAdminFulfillmentStatus(preparingCancel.order_number, "PREPARING", "admin");
   await service.updateAdminFulfillmentStatus(preparingCancel.order_number, "CANCELLED", "admin");
   await assert.rejects(() => service.updateAdminFulfillmentStatus(preparingCancel.order_number, "PREPARING", "admin"), /Transición/);
+});
+
+test("detalle administrativo devuelve historial sanitizado y conserva el orden cronológico", async () => {
+  const repository = new MemoryOrderRepository();
+  let tick = 0;
+  const service = new OrderService({
+    repository,
+    clock: () => new Date(Date.UTC(2026, 0, 2, 3, 4, 5 + tick++)),
+  });
+  const order = await service.createPendingOrder({
+    wompi_reference: "NOIR-ADMIN-HISTORY",
+    currency: "COP",
+    items: [{ name: "SHADOW PALM TEE", size: "M", quantity: 1 }],
+  });
+  await service.updateOrderFromTransaction({
+    id: "txn-admin-history",
+    reference: order.wompi_reference,
+    status: "APPROVED",
+    amount_in_cents: order.amount_in_cents,
+    currency: order.currency,
+  });
+  await service.updateAdminFulfillmentStatus(order.order_number, "PREPARING", "admin");
+  await service.updateAdminFulfillmentStatus(order.order_number, "SHIPPED", "admin");
+
+  const detail = await service.getAdminOrderByNumber(order.order_number);
+  const history = await service.getAdminStatusHistory(order.order_number);
+  assert.equal(history.length, 2);
+  assert.deepEqual(history.map(({ previous_status, new_status }) => ({ previous_status, new_status })), [
+    { previous_status: "RECEIVED", new_status: "PREPARING" },
+    { previous_status: "PREPARING", new_status: "SHIPPED" },
+  ]);
+  assert.equal(detail.fulfillment_status, "SHIPPED");
+  assert.equal("order_id" in history[0], false);
+  assert.equal("changed_by" in history[0], false);
+  assert.equal("id" in detail, false);
+  assert.equal("transaction_id" in detail, false);
+  assert.equal("wompi_reference" in detail, false);
+});
+
+test("pedido sin historial conserva la respuesta vacía y el listado general sigue separado", async () => {
+  const repository = new MemoryOrderRepository();
+  const service = new OrderService({ repository });
+  const order = await service.createPendingOrder({
+    wompi_reference: "NOIR-ADMIN-NO-HISTORY",
+    currency: "COP",
+    items: [{ name: "SHADOW PALM TEE", size: "M", quantity: 1 }],
+  });
+
+  assert.deepEqual(await service.getAdminStatusHistory(order.order_number), []);
+  const listed = await service.listAdminOrders({});
+  assert.equal(listed.total, 1);
+  assert.equal("history" in listed.orders[0], false);
 });

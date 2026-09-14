@@ -42,6 +42,23 @@ test("la sesión controla visibilidad y no usa almacenamiento del navegador", ()
   assert.equal(script.includes("sessionStorage"), false);
 });
 
+test("el listado general no exige historial y la búsqueda exacta usa detalle", () => {
+  assert.match(script, /result\.orders\.map\(\(order\) => renderOrder\(order\)\)/);
+  assert.match(script, /isExactOrderNumber\(search\)/);
+  assert.match(script, /loadOrderDetail\(search\)/);
+  assert.match(script, /\/api\/admin\/order\?order_number=/);
+});
+
+test("el historial se conserva tras PATCH o se recarga desde detalle", () => {
+  assert.match(script, /Array\.isArray\(result\.history\) \? result : await loadOrderDetail/);
+  assert.match(script, /renderOrder\(detail\.order, detail\.history\)/);
+  assert.match(script, /previous_status/);
+  assert.match(script, /new_status/);
+  assert.match(script, /created_at/);
+  assert.equal(script.includes("order_id"), false);
+  assert.equal(script.includes("changed_by"), false);
+});
+
 test("admin-config solo devuelve publishableKey", async () => {
   const previous = process.env.CLERK_PUBLISHABLE_KEY;
   process.env.CLERK_PUBLISHABLE_KEY = "pk_test_placeholder";
