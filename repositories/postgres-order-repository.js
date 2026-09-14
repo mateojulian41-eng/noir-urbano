@@ -36,6 +36,35 @@ function mapOrder(rows) {
   return order;
 }
 
+function mapOrders(rows) {
+  const grouped = new Map();
+  for (const row of rows) {
+    if (!grouped.has(row.order_number)) grouped.set(row.order_number, []);
+    grouped.get(row.order_number).push(row);
+  }
+  return [...grouped.values()].map(mapOrder);
+}
+
+function classifyListError(error) {
+  const code = String(error?.code || "");
+  if (code === "42P18") return "parameter";
+  if (/^42703$/.test(code)) return "column";
+  if (/^42P01$/.test(code)) return "relation";
+  if (/^42601$/.test(code)) return "syntax";
+  if (/^22P02|22023$/.test(code)) return "parameter";
+  if (/^42803$/.test(code)) return "aggregation";
+  if (/^08|^57P01|^53300$/.test(code)) return "connection";
+  return "connection";
+}
+
+function reportListError(stage, error) {
+  console.info("[admin-orders] list failed", {
+    stage,
+    code: error?.code || "unknown",
+    category: classifyListError(error),
+  });
+}
+
 function toSafeError(error) {
   const safeError = new Error(SAFE_DATABASE_ERROR);
   if (error?.code === "23505") {
@@ -115,6 +144,80 @@ class PostgresOrderRepository extends OrderRepository {
 
   async findByOrderNumber(orderNumber) {
     return this.findOne("order_number", orderNumber);
+  }
+
+  async list({ search, fulfillmentStatus, paymentStatus, limit = 50, offset = 0 } = {}) {
+    const sql = this.getClient();
+    let rows;
+    try {
+      rows = await sql`
+        SELECT o.id, o.order_number, o.wompi_reference, o.transaction_id, o.status,
+          o.amount_in_cents, o.currency, o.environment, o.lookup_token_hash,
+          o.fulfillment_status, o.paid_at, o.created_at, o.updated_at,
+          i.id AS item_id, i.product_name AS item_name, i.size AS item_size,
+          i.quantity AS item_quantity, i.unit_price_in_cents AS item_unit_amount_in_cents,
+          o.total_count
+        FROM (
+          SELECT id, order_number, wompi_reference, transaction_id, status,
+            amount_in_cents, currency, environment, lookup_token_hash,
+            fulfillment_status, paid_at, created_at, updated_at,
+            COUNT(*) OVER () AS total_count
+          FROM orders
+          WHERE (CAST(${search || null} AS text) IS NULL
+            OR order_number ILIKE '%' || CAST(${search || null} AS text) || '%')
+            AND (CAST(${fulfillmentStatus || null} AS text) IS NULL
+              OR fulfillment_status = CAST(${fulfillmentStatus || null} AS text))
+            AND (CAST(${paymentStatus || null} AS text) IS NULL
+              OR status = CAST(${paymentStatus || null} AS text))
+          ORDER BY created_at DESC
+          LIMIT CAST(${limit} AS integer) OFFSET CAST(${offset} AS integer)
+        ) o
+        LEFT JOIN order_items i ON i.order_id = o.id
+        ORDER BY o.created_at DESC, i.id
+      `;
+    } catch (error) {
+      reportListError("query", error);
+      throw error;
+    }
+
+    try {
+      const orders = mapOrders(rows);
+      return { total: Number(rows[0]?.total_count || 0), orders };
+    } catch (error) {
+      reportListError("map", error);
+      throw error;
+    }
+  }
+
+  async updateFulfillmentStatus(orderNumber, nextStatus, actorId, changedAt = new Date().toISOString()) {
+    const sql = this.getClient();
+    const result = await sql.transaction([
+      sql`
+        INSERT INTO order_status_history (order_id, previous_status, new_status, changed_by, created_at)
+        SELECT id, fulfillment_status, ${nextStatus}, ${actorId}, ${changedAt}
+        FROM orders WHERE order_number = ${orderNumber}
+      `,
+      sql`
+        UPDATE orders
+        SET fulfillment_status = ${nextStatus}, updated_at = ${changedAt}
+        WHERE order_number = ${orderNumber}
+        RETURNING id, order_number, wompi_reference, transaction_id, status,
+          amount_in_cents, currency, environment, lookup_token_hash,
+          fulfillment_status, paid_at, created_at, updated_at
+      `,
+    ]);
+    return result[1]?.[0] ? mapOrder([result[1][0]]) : undefined;
+  }
+
+  async getStatusHistory(orderNumber) {
+    const sql = this.getClient();
+    return sql`
+      SELECT h.order_id, h.previous_status, h.new_status, h.changed_by, h.created_at
+      FROM order_status_history h
+      JOIN orders o ON o.id = h.order_id
+      WHERE o.order_number = ${orderNumber}
+      ORDER BY h.created_at DESC
+    `;
   }
 
   async findOne(column, value) {
@@ -207,3 +310,4 @@ class PostgresOrderRepository extends OrderRepository {
 
 module.exports = PostgresOrderRepository;
 module.exports.toSafeError = toSafeError;
+module.exports.classifyListError = classifyListError;

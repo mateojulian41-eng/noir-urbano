@@ -7,6 +7,12 @@ const checkoutHandler = require("./api/wompi-checkout");
 const transactionHandler = require("./api/wompi-transaction");
 const webhookHandler = require("./api/wompi-webhook");
 const orderStatusHandler = require("./api/order-status");
+const adminOrdersHandler = require("./api/admin-orders");
+const adminConfigHandler = require("./api/admin-config");
+const adminOrdersRoute = require("./api/admin/orders");
+const adminOrderRoute = require("./api/admin/order");
+const adminOrderStatusRoute = require("./api/admin/order-status");
+const clerkProxyHandler = require("./api/__clerk/[...path]");
 
 const root = __dirname;
 const port = Number(process.env.PORT || 4173);
@@ -112,6 +118,36 @@ const server = http.createServer((req, res) => {
 
   if (pathname === "/api/order-status") {
     runApi(orderStatusHandler, req, res);
+    return;
+  }
+
+  if (pathname === "/api/admin-orders") {
+    runApi(adminOrdersHandler, req, res);
+    return;
+  }
+
+  if (pathname === "/api/admin/orders") {
+    runApi(adminOrdersRoute, req, res);
+    return;
+  }
+
+  if (pathname === "/api/admin/order") {
+    runApi(adminOrderRoute, req, res);
+    return;
+  }
+
+  if (pathname === "/api/admin/order-status") {
+    runApi(adminOrderStatusRoute, req, res);
+    return;
+  }
+
+  if (pathname === "/api/admin-config") {
+    runApi(adminConfigHandler, req, res);
+    return;
+  }
+
+  if (pathname === "/__clerk" || pathname.startsWith("/__clerk/") || pathname === "/api/__clerk" || pathname.startsWith("/api/__clerk/")) {
+    runApi(clerkProxyHandler, req, res);
     return;
   }
 
