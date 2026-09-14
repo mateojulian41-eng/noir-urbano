@@ -29,6 +29,85 @@ function configureProxy() {
   process.env.CLERK_SECRET_KEY = "test-secret-not-output";
 }
 
+test("clasifica todas las configuraciones de producción sin exponer valores", () => {
+  const valid = {
+    CLERK_PROXY_URL: " https://noir-urbano.vercel.app/__clerk/ ",
+    CLERK_SECRET_KEY: " test-secret ",
+    CLERK_FRONTEND_API_URL: " https://frontend-api.clerk.dev/ ",
+  };
+  assert.equal(proxyHandler.getConfiguration({}).category, "proxy_url_missing");
+  assert.equal(proxyHandler.getConfiguration({ CLERK_PROXY_URL: valid.CLERK_PROXY_URL }).category, "secret_missing");
+  assert.equal(proxyHandler.getConfiguration({ CLERK_PROXY_URL: valid.CLERK_PROXY_URL, CLERK_SECRET_KEY: valid.CLERK_SECRET_KEY }).category, "upstream_missing");
+  assert.equal(proxyHandler.getConfiguration({ ...valid, CLERK_PROXY_URL: "not-a-url" }).category, "proxy_url_invalid");
+  assert.equal(proxyHandler.getConfiguration({ ...valid, CLERK_FRONTEND_API_URL: "https://attacker.example/" }).category, "upstream_invalid");
+  assert.equal(proxyHandler.getConfiguration({ ...valid, CLERK_FRONTEND_API_URL: "https://noir-urbano.vercel.app/__clerk/" }).category, "upstream_cycle");
+  const configuration = proxyHandler.getConfiguration(valid);
+  assert.equal(configuration.category, "configuration_valid");
+  assert.equal(configuration.proxyUrl.toString(), "https://noir-urbano.vercel.app/__clerk");
+  assert.equal(configuration.upstreamUrl.toString(), "https://frontend-api.clerk.dev/");
+  assert.equal(proxyHandler.getConfiguration(null).category, "unknown_configuration");
+});
+
+test("la configuración inválida no ejecuta fetch y el diagnóstico solo contiene presencia y categoría", async () => {
+  const previous = {
+    proxy: process.env.CLERK_PROXY_URL,
+    secret: process.env.CLERK_SECRET_KEY,
+    upstream: process.env.CLERK_FRONTEND_API_URL,
+  };
+  process.env.CLERK_PROXY_URL = "";
+  process.env.CLERK_SECRET_KEY = "secret-never-logged";
+  process.env.CLERK_FRONTEND_API_URL = "https://frontend-api.clerk.dev";
+  const originalFetch = global.fetch;
+  const originalInfo = console.info;
+  let called = false;
+  let log;
+  global.fetch = async () => { called = true; };
+  console.info = (message, value) => { log = { message, value }; };
+  try {
+    const res = createRes();
+    await proxyHandler(createReq("GET", "/__clerk/v1/proxy-health"), res);
+    assert.equal(res.statusCode, 503);
+    assert.equal(called, false);
+    assert.deepEqual(log.value, { category: "proxy_url_missing", proxyUrlPresent: false, secretPresent: true, upstreamPresent: true });
+    assert.equal(JSON.stringify(log).includes("secret-never-logged"), false);
+  } finally {
+    console.info = originalInfo;
+    global.fetch = originalFetch;
+    if (previous.proxy === undefined) delete process.env.CLERK_PROXY_URL; else process.env.CLERK_PROXY_URL = previous.proxy;
+    if (previous.secret === undefined) delete process.env.CLERK_SECRET_KEY; else process.env.CLERK_SECRET_KEY = previous.secret;
+    if (previous.upstream === undefined) delete process.env.CLERK_FRONTEND_API_URL; else process.env.CLERK_FRONTEND_API_URL = previous.upstream;
+  }
+});
+
+test("la configuración válida normaliza espacios y barras finales y ejecuta fetch", async () => {
+  const previous = {
+    proxy: process.env.CLERK_PROXY_URL,
+    secret: process.env.CLERK_SECRET_KEY,
+    upstream: process.env.CLERK_FRONTEND_API_URL,
+  };
+  process.env.CLERK_PROXY_URL = " https://noir-urbano.vercel.app/__clerk/ ";
+  process.env.CLERK_SECRET_KEY = " secret-runtime ";
+  process.env.CLERK_FRONTEND_API_URL = " https://frontend-api.clerk.dev/ ";
+  const originalFetch = global.fetch;
+  let called = false;
+  global.fetch = async (url) => {
+    called = true;
+    assert.equal(String(url), "https://frontend-api.clerk.dev/v1/proxy-health");
+    return { status: 200, headers: new Headers(), arrayBuffer: async () => Buffer.from("ok") };
+  };
+  try {
+    const res = createRes();
+    await proxyHandler(createReq("GET", "/__clerk/v1/proxy-health"), res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(called, true);
+  } finally {
+    global.fetch = originalFetch;
+    if (previous.proxy === undefined) delete process.env.CLERK_PROXY_URL; else process.env.CLERK_PROXY_URL = previous.proxy;
+    if (previous.secret === undefined) delete process.env.CLERK_SECRET_KEY; else process.env.CLERK_SECRET_KEY = previous.secret;
+    if (previous.upstream === undefined) delete process.env.CLERK_FRONTEND_API_URL; else process.env.CLERK_FRONTEND_API_URL = previous.upstream;
+  }
+});
+
 test("proxy Clerk elimina prefijo, conserva query, método, cuerpo y forwarded-for", async () => {
   configureProxy();
   const originalFetch = global.fetch;
