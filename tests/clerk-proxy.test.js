@@ -29,6 +29,13 @@ function configureProxy() {
   process.env.CLERK_SECRET_KEY = "test-secret-not-output";
 }
 
+function upstreamHeaders(values = {}, cookies = []) {
+  return {
+    get(name) { return values[name.toLowerCase()] || null; },
+    getSetCookie() { return cookies; },
+  };
+}
+
 test("clasifica todas las configuraciones de producción sin exponer valores", () => {
   const valid = {
     CLERK_PROXY_URL: " https://noir-urbano.vercel.app/__clerk/ ",
@@ -313,6 +320,89 @@ test("proxy conserva query legítima en environment y proxy-health", async () =>
     assert.deepEqual(urls, [
       "https://frontend-api.clerk.dev/v1/environment?__clerk_api_version=X&__clerk_js_version=Y",
       "https://frontend-api.clerk.dev/v1/proxy-health?__clerk_api_version=X",
+    ]);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("proxy preserva múltiples Set-Cookie separados y atributos de seguridad", async () => {
+  configureProxy();
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({
+    status: 200,
+    headers: upstreamHeaders({
+      "content-type": "application/json",
+      location: "/continue",
+      "content-encoding": "gzip",
+      "content-length": "999",
+    }, [
+      "__session=one; Domain=noir-urbano.vercel.app; Path=/; Secure; HttpOnly; SameSite=Lax",
+      "__client=two; Domain=noir-urbano.vercel.app; Path=/; Secure; HttpOnly; SameSite=None",
+    ]),
+    arrayBuffer: async () => Buffer.from("{}"),
+  });
+  try {
+    const res = createRes();
+    await proxyHandler(createReq("GET", "/__clerk/v1/environment"), res);
+    assert.deepEqual(res.headers["set-cookie"], [
+      "__session=one; Domain=noir-urbano.vercel.app; Path=/; Secure; HttpOnly; SameSite=Lax",
+      "__client=two; Domain=noir-urbano.vercel.app; Path=/; Secure; HttpOnly; SameSite=None",
+    ]);
+    assert.equal(res.headers.location, "/continue");
+    assert.equal(res.headers["content-encoding"], "gzip");
+    assert.equal(res.headers["content-length"], undefined);
+    assert.equal(res.headers["set-cookie"].join(",").includes("__client=two"), true);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("proxy conserva una cookie, ausencia de cookies y Cookie entrante sin registrarla", async () => {
+  configureProxy();
+  const originalFetch = global.fetch;
+  const originalInfo = console.info;
+  const logs = [];
+  const requests = [];
+  console.info = (message, value) => logs.push({ message, value });
+  global.fetch = async (url, options) => {
+    requests.push(options.headers.get("cookie"));
+    const cookies = requests.length === 1 ? ["single=value; Path=/; Secure; HttpOnly; SameSite=Strict"] : [];
+    return { status: 200, headers: upstreamHeaders({}, cookies), arrayBuffer: async () => Buffer.from("ok") };
+  };
+  try {
+    const first = createRes();
+    await proxyHandler(createReq("GET", "/__clerk/v1/client", "", { cookie: "__session=opaque; __client=opaque" }), first);
+    const second = createRes();
+    await proxyHandler(createReq("POST", "/__clerk/v1/client/attempt_first_factor", "form-body", { cookie: "__session=opaque; __client=opaque", "content-type": "application/x-www-form-urlencoded" }), second);
+    assert.deepEqual(first.headers["set-cookie"], ["single=value; Path=/; Secure; HttpOnly; SameSite=Strict"]);
+    assert.equal(second.headers["set-cookie"], undefined);
+    assert.deepEqual(requests, ["__session=opaque; __client=opaque", "__session=opaque; __client=opaque"]);
+    assert.equal(logs.every(({ value }) => !JSON.stringify(value).includes("opaque")), true);
+    assert.deepEqual(logs.map(({ value }) => value), [
+      { incomingCookiePresent: true, upstreamSetCookieCount: 1 },
+      { incomingCookiePresent: true, upstreamSetCookieCount: 0 },
+    ]);
+  } finally {
+    console.info = originalInfo;
+    global.fetch = originalFetch;
+  }
+});
+
+test("proxy preserva body y Cookie en sign_ins y attempt_first_factor", async () => {
+  configureProxy();
+  const originalFetch = global.fetch;
+  const calls = [];
+  global.fetch = async (url, options) => {
+    calls.push({ url: String(url), method: options.method, body: options.body.toString(), cookie: options.headers.get("cookie") });
+    return { status: 200, headers: upstreamHeaders(), arrayBuffer: async () => Buffer.from("{}") };
+  };
+  try {
+    await proxyHandler(createReq("POST", "/__clerk/v1/client/sign_ins?__clerk_api_version=X", "sign-in-body", { cookie: "__session=opaque" }), createRes());
+    await proxyHandler(createReq("POST", "/__clerk/v1/client/attempt_first_factor?__clerk_js_version=Y", "factor-body", { cookie: "__session=opaque" }), createRes());
+    assert.deepEqual(calls, [
+      { url: "https://frontend-api.clerk.dev/v1/client/sign_ins?__clerk_api_version=X", method: "POST", body: "sign-in-body", cookie: "__session=opaque" },
+      { url: "https://frontend-api.clerk.dev/v1/client/attempt_first_factor?__clerk_js_version=Y", method: "POST", body: "factor-body", cookie: "__session=opaque" },
     ]);
   } finally {
     global.fetch = originalFetch;
