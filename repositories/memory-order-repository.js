@@ -10,6 +10,7 @@ class MemoryOrderRepository extends OrderRepository {
     this.ordersByReference = new Map();
     this.ordersByNumber = new Map();
     this.transactions = new Map();
+    this.statusHistory = new Map();
   }
 
   async create(order) {
@@ -18,6 +19,7 @@ class MemoryOrderRepository extends OrderRepository {
     }
     this.ordersByReference.set(order.wompi_reference, clone(order));
     this.ordersByNumber.set(order.order_number, clone(order));
+    this.statusHistory.set(order.order_number, []);
     return clone(order);
   }
 
@@ -45,6 +47,29 @@ class MemoryOrderRepository extends OrderRepository {
     this.ordersByReference.set(order.wompi_reference, clone(order));
     this.ordersByNumber.set(order.order_number, clone(order));
     return clone(order);
+  }
+
+  async list({ search, fulfillmentStatus, paymentStatus, limit = 50, offset = 0 } = {}) {
+    let orders = [...this.ordersByReference.values()];
+    if (search) orders = orders.filter((order) => order.order_number.toLowerCase().includes(search.toLowerCase()));
+    if (fulfillmentStatus) orders = orders.filter((order) => order.fulfillment_status === fulfillmentStatus);
+    if (paymentStatus) orders = orders.filter((order) => order.status === paymentStatus);
+    orders.sort((left, right) => right.created_at.localeCompare(left.created_at));
+    return { total: orders.length, orders: orders.slice(offset, offset + limit).map(clone) };
+  }
+
+  async updateFulfillmentStatus(orderNumber, nextStatus, actorId, changedAt = new Date().toISOString()) {
+    const order = this.ordersByNumber.get(orderNumber);
+    if (!order) return undefined;
+    const updated = { ...order, fulfillment_status: nextStatus, updated_at: changedAt };
+    this.ordersByReference.set(order.wompi_reference, clone(updated));
+    this.ordersByNumber.set(orderNumber, clone(updated));
+    this.statusHistory.get(orderNumber).push({ order_id: order.id, previous_status: order.fulfillment_status, new_status: nextStatus, changed_by: actorId, created_at: changedAt });
+    return clone(updated);
+  }
+
+  async getStatusHistory(orderNumber) {
+    return clone(this.statusHistory.get(orderNumber) || []);
   }
 
   async recordTransaction(transactionId, reference) {

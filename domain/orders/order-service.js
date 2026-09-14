@@ -19,6 +19,14 @@ const WOMPI_STATUS_MAP = Object.freeze({
   ERROR: ORDER_STATUSES.ERROR,
 });
 
+const FULFILLMENT_TRANSITIONS = Object.freeze({
+  RECEIVED: new Set(["RECEIVED", "PREPARING", "CANCELLED"]),
+  PREPARING: new Set(["PREPARING", "SHIPPED", "CANCELLED"]),
+  SHIPPED: new Set(["SHIPPED", "DELIVERED"]),
+  DELIVERED: new Set(["DELIVERED"]),
+  CANCELLED: new Set(["CANCELLED"]),
+});
+
 class OrderService {
   constructor({ repository, productCatalog = DEFAULT_PRODUCT_CATALOG, clock = () => new Date() } = {}) {
     if (!repository) throw new TypeError("OrderService requiere un repositorio.");
@@ -70,6 +78,37 @@ class OrderService {
   async getOrderByNumber(number) {
     if (typeof number !== "string" || !/^[A-Za-z0-9-]{4,80}$/.test(number)) return undefined;
     return this.repository.findByOrderNumber(number);
+  }
+
+  async listAdminOrders(filters) {
+    const result = await this.repository.list(filters);
+    return { total: result.total, orders: result.orders.map((order) => this.sanitizeOrderForAdmin(order)) };
+  }
+
+  async getAdminOrderByNumber(number) {
+    const order = await this.repository.findByOrderNumber(number);
+    return order ? this.sanitizeOrderForAdmin(order) : undefined;
+  }
+
+  async updateAdminFulfillmentStatus(orderNumber, nextStatus, actorId) {
+    const order = await this.repository.findByOrderNumber(orderNumber);
+    if (!order) return undefined;
+    if (order.fulfillment_status === nextStatus) return this.sanitizeOrderForAdmin(order);
+    if (!FULFILLMENT_TRANSITIONS[order.fulfillment_status]?.has(nextStatus)) {
+      throw new Error("Transición operativa inválida.");
+    }
+    if (["PREPARING", "SHIPPED", "DELIVERED"].includes(nextStatus) && order.status !== ORDER_STATUSES.APPROVED) {
+      throw new Error("Solo los pedidos aprobados pueden avanzar operativamente.");
+    }
+    const updated = await this.repository.updateFulfillmentStatus(orderNumber, nextStatus, actorId, this.clock().toISOString());
+    return this.sanitizeOrderForAdmin(updated);
+  }
+
+  async getAdminStatusHistory(orderNumber) {
+    const history = await this.repository.getStatusHistory(orderNumber);
+    return history.map(({ previous_status, new_status, changed_by, created_at }) => ({
+      previous_status, new_status, changed_by, created_at,
+    }));
   }
 
   async getPublicOrderByNumberAndToken(number, token) {
@@ -158,6 +197,24 @@ class OrderService {
         size,
         quantity,
         unit_amount_in_cents,
+      })),
+      amount_in_cents: order.amount_in_cents,
+      currency: order.currency,
+      environment: order.environment,
+      fulfillment_status: order.fulfillment_status,
+      paid_at: order.paid_at,
+      created_at: order.created_at,
+      updated_at: order.updated_at,
+    };
+  }
+
+  sanitizeOrderForAdmin(order) {
+    if (!order) return undefined;
+    return {
+      order_number: order.order_number,
+      status: order.status,
+      items: order.items.map(({ name, size, quantity, unit_amount_in_cents }) => ({
+        name, size, quantity, unit_amount_in_cents,
       })),
       amount_in_cents: order.amount_in_cents,
       currency: order.currency,

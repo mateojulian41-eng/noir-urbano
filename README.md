@@ -18,7 +18,8 @@ https://noir-urbano.vercel.app
 - Endpoint webhook para validar eventos de Wompi.
 - Interfaz responsive para dispositivos móviles y escritorio.
 - Fallback a WhatsApp cuando el checkout no está disponible.
-- Servidor local Node.js sin dependencias externas de ejecución.
+- Panel administrativo protegido por Clerk para pedidos e historial operativo.
+- Servidor local Node.js y funciones API compatibles con Vercel.
 
 ## Tecnologías
 
@@ -37,6 +38,9 @@ https://noir-urbano.vercel.app
 .
 ├── api/
 │   ├── order-status.js         # Consulta pública con número y token
+│   ├── admin-auth.js           # Verificación de sesión y allowlist administrativa
+│   ├── admin-config.js         # Configuración pública mínima de Clerk
+│   ├── admin-orders.js         # Listado y cambios operativos autenticados
 │   ├── wompi-checkout.js       # Valida pedidos y crea la URL firmada de checkout
 │   ├── wompi-transaction.js    # Consulta una transacción en Wompi
 │   └── wompi-webhook.js        # Valida eventos recibidos desde Wompi
@@ -47,6 +51,9 @@ https://noir-urbano.vercel.app
 ├── .env.example                # Plantilla local de variables de entorno
 ├── .gitignore                  # Exclusiones, incluido .env
 ├── index.html                  # Marcado principal de la tienda
+├── admin.html                  # Panel administrativo
+├── admin.js                    # Sesión Clerk y gestión de pedidos
+├── admin.css                   # Estilos del panel
 ├── script.js                   # Carrito, checkout y estado del pago
 ├── server.js                   # Servidor HTTP local y archivos estáticos
 ├── styles.css                  # Estilos de la interfaz
@@ -104,6 +111,22 @@ El archivo `.env` está excluido por `.gitignore`. Las llaves privadas y los
 secretos deben permanecer únicamente en el servidor. No copies valores reales
 en `index.html`, `script.js`, documentación, capturas ni registros públicos.
 
+## Panel administrativo
+
+El panel está disponible en `/admin.html`. Clerk controla el inicio de sesión;
+el backend verifica el token y permite continuar únicamente si el `sub` del
+token está incluido en `CLERK_ADMIN_USER_IDS`. Configura también
+`CLERK_PUBLISHABLE_KEY` y `CLERK_SECRET_KEY` en el entorno correspondiente.
+
+Aplica manualmente `migrations/003_admin_order_history.sql` después de la
+migración de seguimiento. Los estados operativos se guardan en `orders` y
+cada cambio queda registrado con el ID del usuario de Clerk, fecha y estados
+anterior y nuevo.
+
+Las funciones administrativas son `GET /api/admin/orders` para listar,
+`GET /api/admin/order?order_number=...` para consultar un pedido y
+`PATCH /api/admin/order-status` para cambiar su estado operativo.
+
 ## Integración con Wompi Sandbox
 
 La integración usa estos endpoints internos:
@@ -143,7 +166,8 @@ ejemplos, documentación ni registros.
 	 aceptar cualquier procesamiento adicional.
 
 El seguimiento público requiere aplicar manualmente la migración versionada de
-`migrations/002_secure_order_tracking.sql` en la base de datos correspondiente.
+`migrations/002_secure_order_tracking.sql` en la base de datos correspondiente,
+y el panel requiere además `migrations/003_admin_order_history.sql`.
 No se ejecuta automáticamente desde la aplicación.
 
 ## Despliegue en Vercel

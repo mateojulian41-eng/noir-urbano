@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>NOIR URBANO | Admin</title>
+  <link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+  <main class="admin-shell">
+    <header class="admin-header">
+      <div>
+        <p class="eyebrow">NOIR URBANO / OPERACIONES</p>
+        <h1>Pedidos</h1>
+      </div>
+      <div class="header-actions"><div id="user-button"></div><button id="sign-out" class="ghost" type="button">Cerrar sesión</button></div>
+    </header>
+
+    <section id="login" class="login-panel" hidden>
+      <p class="eyebrow">Acceso restringido</p>
+      <h2>Inicia sesión para gestionar pedidos.</h2>
+      <button id="sign-in" class="primary" type="button">Iniciar sesión</button>
+    </section>
+
+    <section id="dashboard" hidden>
+      <form id="filters" class="filters">
+        <label class="search-field">Buscar orden<input name="search" placeholder="NU-2026..." autocomplete="off" /></label>
+        <label>Pago<select name="payment_status"><option value="">Todos</option><option value="PENDING_PAYMENT">Pendiente</option><option value="APPROVED">Aprobado</option><option value="DECLINED">Rechazado</option></select></label>
+        <label>Operación<select name="fulfillment_status"><option value="">Todos</option><option value="RECEIVED">Recibido</option><option value="PREPARING">Preparando</option><option value="SHIPPED">Enviado</option><option value="DELIVERED">Entregado</option><option value="CANCELLED">Cancelado</option></select></label>
+        <button class="primary filter-button" type="submit">Filtrar</button>
+      </form>
+      <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
+      <div id="orders" class="orders"></div>
+    </section>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js" crossorigin="anonymous"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

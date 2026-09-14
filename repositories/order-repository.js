@@ -19,6 +19,18 @@ class OrderRepository {
     throw new Error("OrderRepository.update debe ser implementado.");
   }
 
+  async list() {
+    throw new Error("OrderRepository.list debe ser implementado.");
+  }
+
+  async updateFulfillmentStatus() {
+    throw new Error("OrderRepository.updateFulfillmentStatus debe ser implementado.");
+  }
+
+  async getStatusHistory() {
+    throw new Error("OrderRepository.getStatusHistory debe ser implementado.");
+  }
+
   async recordTransaction() {
     throw new Error("OrderRepository.recordTransaction debe ser implementado.");
   }
