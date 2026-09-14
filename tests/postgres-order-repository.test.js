@@ -106,6 +106,61 @@ test("reconstruye una orden y sus items desde el JOIN", async () => {
   assert.ok(mock.calls[0].values.includes(order.wompi_reference));
 });
 
+test("lista sin filtros reconstruye artículos y pagina pedidos, no filas del JOIN", async () => {
+  const rows = [{
+    ...orderRow(), total_count: 2, item_id: 1, item_name: "SHADOW PALM TEE", item_size: "M",
+    item_quantity: 1, item_unit_amount_in_cents: 15000000,
+  }, {
+    ...orderRow(), total_count: 2, item_id: 2, item_name: "HEAT TANK", item_size: "L",
+    item_quantity: 2, item_unit_amount_in_cents: 11000000,
+  }];
+  const mock = createSqlMock({ resultFor: (query) => query.text.includes("COUNT(*) OVER") ? rows : [] });
+  const repository = new PostgresOrderRepository({ databaseUrl: "test-only", sqlClient: mock.sql });
+
+  const result = await repository.list({ limit: 10, offset: 0 });
+
+  assert.equal(result.total, 2);
+  assert.equal(result.orders.length, 1);
+  assert.equal(result.orders[0].items.length, 2);
+  assert.equal(result.orders[0].items[1].name, "HEAT TANK");
+  assert.match(mock.calls[0].text, /COUNT\(\*\) OVER/);
+  assert.match(mock.calls[0].text, /LIMIT\s+\?/);
+  assert.match(mock.calls[0].text, /OFFSET\s+\?/);
+  assert.deepEqual(mock.calls[0].values.slice(-2), [10, 0]);
+});
+
+test("lista filtros vacíos, filtros combinados y búsqueda sin interpolar valores", async () => {
+  const mock = createSqlMock({ resultFor: (query) => query.text.includes("COUNT(*) OVER") ? [] : [] });
+  const repository = new PostgresOrderRepository({ databaseUrl: "test-only", sqlClient: mock.sql });
+
+  await repository.list({ search: "", paymentStatus: "", fulfillmentStatus: "", limit: 25, offset: 5 });
+  await repository.list({ search: "NU-2026", paymentStatus: "APPROVED", fulfillmentStatus: "PREPARING", limit: 5, offset: 10 });
+
+  assert.equal(mock.calls.length, 2);
+  assert.equal(mock.calls[0].values.includes(""), false);
+  assert.ok(mock.calls[1].values.includes("%NU-2026%"));
+  assert.ok(mock.calls[1].values.includes("PREPARING"));
+  assert.ok(mock.calls[1].values.includes("APPROVED"));
+  assert.deepEqual(mock.calls[1].values.slice(-2), [5, 10]);
+  assert.equal(mock.calls[1].text.includes("NU-2026"), false);
+  assert.equal(mock.calls[1].text.includes("APPROVED"), false);
+});
+
+test("el listado devuelve resultado vacío y convierte errores SQL en error controlable", async () => {
+  const emptyMock = createSqlMock({ resultFor: () => [] });
+  const emptyRepository = new PostgresOrderRepository({ databaseUrl: "test-only", sqlClient: emptyMock.sql });
+  assert.deepEqual(await emptyRepository.list(), { total: 0, orders: [] });
+
+  const sqlError = Object.assign(new Error("internal SQL details"), { code: "42601" });
+  const errorMock = createSqlMock({ resultFor: () => Promise.reject(sqlError) });
+  const errorRepository = new PostgresOrderRepository({ databaseUrl: "test-only", sqlClient: errorMock.sql });
+  await assert.rejects(() => errorRepository.list(), (error) => {
+    assert.equal(error.code, "42601");
+    assert.equal(error.message, "internal SQL details");
+    return true;
+  });
+});
+
 test("isTransactionProcessed usa una consulta parametrizada", async () => {
   const mock = createSqlMock({ resultFor: () => [{ 1: 1 }] });
   const repository = new PostgresOrderRepository({ databaseUrl: "test-only", sqlClient: mock.sql });

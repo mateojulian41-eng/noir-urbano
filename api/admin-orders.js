@@ -74,6 +74,10 @@ module.exports = async function handler(req, res) {
       sendJson(res, 400, { error: error.message });
       return;
     }
+    if (error.message === "Persistencia de pedidos no configurada.") {
+      sendJson(res, 503, { error: "Servicio de pedidos no disponible." });
+      return;
+    }
     sendJson(res, 503, { error: "No se pudo gestionar el pedido." });
   }
 };

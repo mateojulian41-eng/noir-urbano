@@ -45,6 +45,25 @@ function mapOrders(rows) {
   return [...grouped.values()].map(mapOrder);
 }
 
+function classifyListError(error) {
+  const code = String(error?.code || "");
+  if (/^42703$/.test(code)) return "column";
+  if (/^42P01$/.test(code)) return "relation";
+  if (/^42601$/.test(code)) return "syntax";
+  if (/^22P02|22023$/.test(code)) return "parameter";
+  if (/^42803$/.test(code)) return "aggregation";
+  if (/^08|^57P01|^53300$/.test(code)) return "connection";
+  return "connection";
+}
+
+function reportListError(stage, error) {
+  console.info("[admin-orders] list failed", {
+    stage,
+    code: error?.code || "unknown",
+    category: classifyListError(error),
+  });
+}
+
 function toSafeError(error) {
   const safeError = new Error(SAFE_DATABASE_ERROR);
   if (error?.code === "23505") {
@@ -128,21 +147,42 @@ class PostgresOrderRepository extends OrderRepository {
 
   async list({ search, fulfillmentStatus, paymentStatus, limit = 50, offset = 0 } = {}) {
     const sql = this.getClient();
-    const rows = await sql`
-      SELECT o.id, o.order_number, o.wompi_reference, o.transaction_id, o.status,
-        o.amount_in_cents, o.currency, o.environment, o.lookup_token_hash,
-        o.fulfillment_status, o.paid_at, o.created_at, o.updated_at,
-        i.id AS item_id, i.product_name AS item_name, i.size AS item_size,
-        i.quantity AS item_quantity, i.unit_price_in_cents AS item_unit_amount_in_cents
-      FROM orders o LEFT JOIN order_items i ON i.order_id = o.id
-      WHERE (${search || null} IS NULL OR o.order_number ILIKE ${search ? `%${search}%` : null})
-        AND (${fulfillmentStatus || null} IS NULL OR o.fulfillment_status = ${fulfillmentStatus || null})
-        AND (${paymentStatus || null} IS NULL OR o.status = ${paymentStatus || null})
-      ORDER BY o.created_at DESC, i.id
-      LIMIT ${limit} OFFSET ${offset}
-    `;
-    const orders = mapOrders(rows);
-    return { total: orders.length, orders };
+    let rows;
+    try {
+      rows = await sql`
+        SELECT o.id, o.order_number, o.wompi_reference, o.transaction_id, o.status,
+          o.amount_in_cents, o.currency, o.environment, o.lookup_token_hash,
+          o.fulfillment_status, o.paid_at, o.created_at, o.updated_at,
+          i.id AS item_id, i.product_name AS item_name, i.size AS item_size,
+          i.quantity AS item_quantity, i.unit_price_in_cents AS item_unit_amount_in_cents,
+          o.total_count
+        FROM (
+          SELECT id, order_number, wompi_reference, transaction_id, status,
+            amount_in_cents, currency, environment, lookup_token_hash,
+            fulfillment_status, paid_at, created_at, updated_at,
+            COUNT(*) OVER () AS total_count
+          FROM orders
+          WHERE (${search || null} IS NULL OR order_number ILIKE ${search ? `%${search}%` : null})
+            AND (${fulfillmentStatus || null} IS NULL OR fulfillment_status = ${fulfillmentStatus || null})
+            AND (${paymentStatus || null} IS NULL OR status = ${paymentStatus || null})
+          ORDER BY created_at DESC
+          LIMIT ${limit} OFFSET ${offset}
+        ) o
+        LEFT JOIN order_items i ON i.order_id = o.id
+        ORDER BY o.created_at DESC, i.id
+      `;
+    } catch (error) {
+      reportListError("query", error);
+      throw error;
+    }
+
+    try {
+      const orders = mapOrders(rows);
+      return { total: Number(rows[0]?.total_count || 0), orders };
+    } catch (error) {
+      reportListError("map", error);
+      throw error;
+    }
   }
 
   async updateFulfillmentStatus(orderNumber, nextStatus, actorId, changedAt = new Date().toISOString()) {
