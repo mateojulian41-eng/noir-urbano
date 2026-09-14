@@ -67,13 +67,15 @@ test("admin-config solo devuelve publishableKey", async () => {
   req.method = "GET";
   await adminConfigHandler(req, res);
   const payload = JSON.parse(res.payload);
-  assert.deepEqual(Object.keys(payload), ["publishableKey"]);
+  assert.deepEqual(Object.keys(payload), ["publishableKey", "proxyUrl"]);
   assert.equal(payload.publishableKey, "pk_test_placeholder");
+  assert.equal(payload.proxyUrl, "");
   if (previous === undefined) delete process.env.CLERK_PUBLISHABLE_KEY;
   else process.env.CLERK_PUBLISHABLE_KEY = previous;
 });
 
 test("rewrite limpia /admin hacia admin.html y no usa catch-all", () => {
-  assert.deepEqual(vercel.rewrites, [{ source: "/admin", destination: "/admin.html" }]);
+  assert.ok(vercel.rewrites.some((rewrite) => rewrite.source === "/admin" && rewrite.destination === "/admin.html"));
+  assert.ok(vercel.rewrites.some((rewrite) => rewrite.source === "/__clerk/:path*" && rewrite.destination === "/api/__clerk/:path*"));
   assert.equal(JSON.stringify(vercel).includes("catch-all"), false);
 });

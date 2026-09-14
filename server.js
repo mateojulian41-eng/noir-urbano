@@ -12,6 +12,7 @@ const adminConfigHandler = require("./api/admin-config");
 const adminOrdersRoute = require("./api/admin/orders");
 const adminOrderRoute = require("./api/admin/order");
 const adminOrderStatusRoute = require("./api/admin/order-status");
+const clerkProxyHandler = require("./api/__clerk/[...path]");
 
 const root = __dirname;
 const port = Number(process.env.PORT || 4173);
@@ -142,6 +143,11 @@ const server = http.createServer((req, res) => {
 
   if (pathname === "/api/admin-config") {
     runApi(adminConfigHandler, req, res);
+    return;
+  }
+
+  if (pathname === "/__clerk" || pathname.startsWith("/__clerk/") || pathname === "/api/__clerk" || pathname.startsWith("/api/__clerk/")) {
+    runApi(clerkProxyHandler, req, res);
     return;
   }
 

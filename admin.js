@@ -125,7 +125,8 @@ async function start() {
   try {
     clerkModule = await import(CLERK_BROWSER_MODULE);
     if (typeof clerkModule.Clerk !== "function") throw new Error("Clerk export");
-    clerk = new clerkModule.Clerk(config.publishableKey);
+    const clerkOptions = config.proxyUrl ? { proxyUrl: config.proxyUrl } : undefined;
+    clerk = new clerkModule.Clerk(config.publishableKey, clerkOptions);
     await clerk.load();
   } catch {
     safeLog("clerkLoaded", false);

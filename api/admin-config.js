@@ -8,5 +8,8 @@ module.exports = function handler(req, res) {
   res.statusCode = 200;
   res.setHeader("Content-Type", "application/json");
   res.setHeader("Cache-Control", "no-store");
-  res.end(JSON.stringify({ publishableKey: process.env.CLERK_PUBLISHABLE_KEY || "" }));
+  res.end(JSON.stringify({
+    publishableKey: process.env.CLERK_PUBLISHABLE_KEY || "",
+    proxyUrl: process.env.CLERK_PROXY_URL || "",
+  }));
 };
