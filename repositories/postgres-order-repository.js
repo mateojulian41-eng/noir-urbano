@@ -47,6 +47,7 @@ function mapOrders(rows) {
 
 function classifyListError(error) {
   const code = String(error?.code || "");
+  if (code === "42P18") return "parameter";
   if (/^42703$/.test(code)) return "column";
   if (/^42P01$/.test(code)) return "relation";
   if (/^42601$/.test(code)) return "syntax";
@@ -162,11 +163,14 @@ class PostgresOrderRepository extends OrderRepository {
             fulfillment_status, paid_at, created_at, updated_at,
             COUNT(*) OVER () AS total_count
           FROM orders
-          WHERE (${search || null} IS NULL OR order_number ILIKE ${search ? `%${search}%` : null})
-            AND (${fulfillmentStatus || null} IS NULL OR fulfillment_status = ${fulfillmentStatus || null})
-            AND (${paymentStatus || null} IS NULL OR status = ${paymentStatus || null})
+          WHERE (CAST(${search || null} AS text) IS NULL
+            OR order_number ILIKE '%' || CAST(${search || null} AS text) || '%')
+            AND (CAST(${fulfillmentStatus || null} AS text) IS NULL
+              OR fulfillment_status = CAST(${fulfillmentStatus || null} AS text))
+            AND (CAST(${paymentStatus || null} AS text) IS NULL
+              OR status = CAST(${paymentStatus || null} AS text))
           ORDER BY created_at DESC
-          LIMIT ${limit} OFFSET ${offset}
+          LIMIT CAST(${limit} AS integer) OFFSET CAST(${offset} AS integer)
         ) o
         LEFT JOIN order_items i ON i.order_id = o.id
         ORDER BY o.created_at DESC, i.id
@@ -306,3 +310,4 @@ class PostgresOrderRepository extends OrderRepository {
 
 module.exports = PostgresOrderRepository;
 module.exports.toSafeError = toSafeError;
+module.exports.classifyListError = classifyListError;

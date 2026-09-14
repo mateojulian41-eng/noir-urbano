@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const PostgresOrderRepository = require("../repositories/postgres-order-repository");
+const { classifyListError } = require("../repositories/postgres-order-repository");
 const createOrderRepository = require("../repositories/order-repository-factory");
 
 const order = {
@@ -124,8 +125,8 @@ test("lista sin filtros reconstruye artículos y pagina pedidos, no filas del JO
   assert.equal(result.orders[0].items.length, 2);
   assert.equal(result.orders[0].items[1].name, "HEAT TANK");
   assert.match(mock.calls[0].text, /COUNT\(\*\) OVER/);
-  assert.match(mock.calls[0].text, /LIMIT\s+\?/);
-  assert.match(mock.calls[0].text, /OFFSET\s+\?/);
+  assert.match(mock.calls[0].text, /LIMIT\s+CAST\(\s*\?\s+AS integer\)/);
+  assert.match(mock.calls[0].text, /OFFSET\s+CAST\(\s*\?\s+AS integer\)/);
   assert.deepEqual(mock.calls[0].values.slice(-2), [10, 0]);
 });
 
@@ -138,12 +139,28 @@ test("lista filtros vacíos, filtros combinados y búsqueda sin interpolar valor
 
   assert.equal(mock.calls.length, 2);
   assert.equal(mock.calls[0].values.includes(""), false);
-  assert.ok(mock.calls[1].values.includes("%NU-2026%"));
+  assert.ok(mock.calls[1].values.includes("NU-2026"));
   assert.ok(mock.calls[1].values.includes("PREPARING"));
   assert.ok(mock.calls[1].values.includes("APPROVED"));
   assert.deepEqual(mock.calls[1].values.slice(-2), [5, 10]);
   assert.equal(mock.calls[1].text.includes("NU-2026"), false);
   assert.equal(mock.calls[1].text.includes("APPROVED"), false);
+});
+
+test("lista con parámetros null usa casts explícitos y evita 42P18", async () => {
+  const mock = createSqlMock({ resultFor: () => [] });
+  const repository = new PostgresOrderRepository({ databaseUrl: "test-only", sqlClient: mock.sql });
+
+  const result = await repository.list({ search: null, paymentStatus: null, fulfillmentStatus: null, limit: 20, offset: 0 });
+  const query = mock.calls[0];
+
+  assert.deepEqual(result, { total: 0, orders: [] });
+  assert.match(query.text, /CAST\(\s*\?\s+AS text\)/);
+  assert.match(query.text, /LIMIT\s+CAST\(\s*\?\s+AS integer\)/);
+  assert.match(query.text, /OFFSET\s+CAST\(\s*\?\s+AS integer\)/);
+  assert.equal(query.values.filter((value) => value === null).length, 6);
+  assert.equal(classifyListError({ code: "42P18" }), "parameter");
+  assert.notEqual(classifyListError({ code: "42P18" }), "connection");
 });
 
 test("el listado devuelve resultado vacío y convierte errores SQL en error controlable", async () => {
