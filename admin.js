@@ -9,6 +9,25 @@ const ordersElement = document.querySelector("#orders");
 const feedback = document.querySelector("#feedback");
 const filterForm = document.querySelector("#filters");
 let clerk;
+let clerkReady = false;
+const signInButton = document.querySelector("#sign-in");
+const signOutButton = document.querySelector("#sign-out");
+const CLERK_BROWSER_MODULE = "https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5.117.0/+esm";
+
+function safeLog(event, value) {
+  console.info(`[admin-clerk] ${event} ${value ? "true" : "false"}`);
+}
+
+function isPublishableKey(value) {
+  return typeof value === "string" && /^pk_(test|live)_[A-Za-z0-9_-]+$/.test(value);
+}
+
+function setAuthControls({ loading, authenticated }) {
+  signInButton.disabled = loading || authenticated || !clerkReady;
+  signOutButton.disabled = loading || !authenticated || !clerkReady;
+  signInButton.hidden = loading || authenticated;
+  signOutButton.hidden = loading || !authenticated;
+}
 
 function setFeedback(message, isError = false) {
   feedback.textContent = message;
@@ -71,21 +90,58 @@ async function loadOrders() {
 }
 
 async function start() {
-  const config = await fetch("/api/admin-config").then((response) => response.json());
-  if (!config.publishableKey || !window.Clerk) throw new Error("El acceso administrativo no está configurado.");
-  clerk = new window.Clerk(config.publishableKey);
-  await clerk.load();
+  setAuthControls({ loading: true, authenticated: false });
+  let config;
+  try {
+    const response = await fetch("/api/admin-config", { cache: "no-store" });
+    if (!response.ok) throw new Error("config");
+    config = await response.json();
+  } catch {
+    safeLog("configLoaded", false);
+    throw new Error("No se pudo cargar la configuración de acceso.");
+  }
+  const configLoaded = isPublishableKey(config.publishableKey);
+  safeLog("configLoaded", configLoaded);
+  if (!configLoaded) throw new Error("La configuración de acceso no es válida.");
+
+  let clerkModule;
+  try {
+    clerkModule = await import(CLERK_BROWSER_MODULE);
+    if (typeof clerkModule.Clerk !== "function") throw new Error("Clerk export");
+    clerk = new clerkModule.Clerk(config.publishableKey);
+    await clerk.load();
+  } catch {
+    safeLog("clerkLoaded", false);
+    throw new Error("No se pudo cargar el acceso administrativo.");
+  }
+  clerkReady = true;
+  safeLog("clerkLoaded", true);
+  safeLog("sessionPresent", Boolean(clerk.session));
   clerk.addListener(({ user }) => {
     const authenticated = Boolean(user);
     loginPanel.hidden = authenticated;
     dashboard.hidden = !authenticated;
-    document.querySelector("#sign-out").hidden = !authenticated;
+    setAuthControls({ loading: false, authenticated });
+    safeLog("sessionPresent", authenticated);
     if (authenticated) loadOrders().catch((error) => setFeedback(error.message, true));
   });
-  document.querySelector("#sign-in").addEventListener("click", () => clerk.openSignIn());
-  document.querySelector("#sign-out").addEventListener("click", () => clerk.signOut());
+  signInButton.addEventListener("click", () => { if (clerkReady) clerk.openSignIn(); });
+  signOutButton.addEventListener("click", () => { if (clerkReady) clerk.signOut(); });
   filterForm.addEventListener("submit", (event) => { event.preventDefault(); loadOrders().catch((error) => setFeedback(error.message, true)); });
-  if (clerk.user) { loginPanel.hidden = true; dashboard.hidden = false; await loadOrders(); } else { loginPanel.hidden = false; document.querySelector("#sign-out").hidden = true; }
+  if (clerk.user) {
+    loginPanel.hidden = true;
+    dashboard.hidden = false;
+    setAuthControls({ loading: false, authenticated: true });
+    await loadOrders();
+  } else {
+    loginPanel.hidden = false;
+    setAuthControls({ loading: false, authenticated: false });
+  }
 }
 
-start().catch((error) => { loginPanel.hidden = false; setFeedback(error.message, true); });
+start().catch((error) => {
+  clerkReady = false;
+  setAuthControls({ loading: false, authenticated: false });
+  loginPanel.hidden = false;
+  setFeedback(error.message, true);
+});

@@ -14,13 +14,13 @@
         <p class="eyebrow">NOIR URBANO / OPERACIONES</p>
         <h1>Pedidos</h1>
       </div>
-      <div class="header-actions"><div id="user-button"></div><button id="sign-out" class="ghost" type="button">Cerrar sesión</button></div>
+      <div class="header-actions"><div id="user-button"></div><button id="sign-out" class="ghost" type="button" hidden disabled>Cerrar sesión</button></div>
     </header>
 
     <section id="login" class="login-panel" hidden>
       <p class="eyebrow">Acceso restringido</p>
       <h2>Inicia sesión para gestionar pedidos.</h2>
-      <button id="sign-in" class="primary" type="button">Iniciar sesión</button>
+          <button id="sign-in" class="primary" type="button" disabled>Iniciar sesión</button>
     </section>
 
     <section id="dashboard" hidden>
@@ -34,7 +34,6 @@
       <div id="orders" class="orders"></div>
     </section>
   </main>
-  <script src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/dist/clerk.browser.js" crossorigin="anonymous"></script>
   <script src="admin.js"></script>
 </body>
 </html>
