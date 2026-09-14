@@ -78,12 +78,18 @@ function getUpstreamQuery(req) {
 
 function getForwardHeaders(req) {
   const headers = new Headers();
-  const blocked = new Set(["host", "content-length", "connection", "transfer-encoding", "clerk-secret-key", "clerk-proxy-url"]);
+  const blocked = new Set(["host", "content-length", "connection", "keep-alive", "transfer-encoding", "upgrade", "clerk-secret-key", "clerk-proxy-url"]);
   for (const [name, rawValue] of Object.entries(req.headers || {})) {
     const value = Array.isArray(rawValue) ? rawValue.join(", ") : rawValue;
     if (!blocked.has(name.toLowerCase()) && typeof value === "string" && value) headers.set(name, value);
   }
   return headers;
+}
+
+function getSetCookieValues(headers) {
+  if (typeof headers.getSetCookie === "function") return headers.getSetCookie();
+  if (typeof headers.raw === "function") return headers.raw()["set-cookie"] || [];
+  return [];
 }
 
 async function readBody(req) {
@@ -137,12 +143,19 @@ module.exports = async function handler(req, res) {
       body,
       redirect: "manual",
     });
+    const setCookies = getSetCookieValues(upstream.headers);
+    console.info("[clerk-proxy] cookie-flow", {
+      incomingCookiePresent: Boolean(req.headers?.cookie),
+      upstreamSetCookieCount: setCookies.length,
+    });
     res.statusCode = upstream.status;
     res.setHeader("Cache-Control", "no-store");
-    for (const name of ["content-type", "location", "www-authenticate", "retry-after", "set-cookie"]) {
+    for (const name of ["content-type", "content-encoding", "location", "www-authenticate", "retry-after"]) {
       const value = upstream.headers.get(name);
       if (value) res.setHeader(name, value);
     }
+    res.removeHeader?.("content-length");
+    if (setCookies.length) res.setHeader("Set-Cookie", setCookies);
     if (req.method === "HEAD") {
       res.end();
       return;
@@ -158,4 +171,5 @@ module.exports.getConfiguration = getConfiguration;
 module.exports.normalizeUrl = normalizeUrl;
 module.exports.getProxyPath = getProxyPath;
 module.exports.getUpstreamQuery = getUpstreamQuery;
+module.exports.getSetCookieValues = getSetCookieValues;
 module.exports.MAX_BODY_BYTES = MAX_BODY_BYTES;
