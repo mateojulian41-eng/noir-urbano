@@ -150,11 +150,13 @@ module.exports = async function handler(req, res) {
     });
     res.statusCode = upstream.status;
     res.setHeader("Cache-Control", "no-store");
-    for (const name of ["content-type", "content-encoding", "location", "www-authenticate", "retry-after"]) {
+    for (const name of ["content-type", "cache-control", "location", "www-authenticate", "retry-after"]) {
       const value = upstream.headers.get(name);
       if (value) res.setHeader(name, value);
     }
+    res.removeHeader?.("content-encoding");
     res.removeHeader?.("content-length");
+    res.removeHeader?.("transfer-encoding");
     if (setCookies.length) res.setHeader("Set-Cookie", setCookies);
     if (req.method === "HEAD") {
       res.end();

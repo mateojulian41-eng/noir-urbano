@@ -261,13 +261,16 @@ test("proxy Clerk reenvía HEAD sin cuerpo y OPTIONS sin CORS permisivo", async 
   const methods = [];
   global.fetch = async (url, options) => {
     methods.push({ url: String(url), method: options.method, body: options.body });
-    return { status: 204, headers: new Headers({ "access-control-allow-origin": "https://noir-urbano.vercel.app" }), arrayBuffer: async () => Buffer.from("not returned") };
+    return { status: 204, headers: new Headers({ "access-control-allow-origin": "https://noir-urbano.vercel.app", "content-encoding": "br", "content-length": "999", "transfer-encoding": "chunked" }), arrayBuffer: async () => Buffer.from("not returned") };
   };
   try {
     const headRes = createRes();
     await proxyHandler(createReq("HEAD", "/__clerk/v1/environment"), headRes);
     assert.equal(headRes.statusCode, 204);
     assert.equal(headRes.payload, undefined);
+    assert.equal(headRes.headers["content-encoding"], undefined);
+    assert.equal(headRes.headers["content-length"], undefined);
+    assert.equal(headRes.headers["transfer-encoding"], undefined);
     const optionsRes = createRes();
     await proxyHandler(createReq("OPTIONS", "/__clerk/v1/environment"), optionsRes);
     assert.equal(optionsRes.statusCode, 204);
@@ -326,16 +329,18 @@ test("proxy conserva query legítima en environment y proxy-health", async () =>
   }
 });
 
-test("proxy preserva múltiples Set-Cookie separados y atributos de seguridad", async () => {
+test("proxy entrega JSON descomprimido sin headers de transporte y preserva cookies", async () => {
   configureProxy();
   const originalFetch = global.fetch;
   global.fetch = async () => ({
     status: 200,
     headers: upstreamHeaders({
       "content-type": "application/json",
+      "cache-control": "private, max-age=0",
       location: "/continue",
-      "content-encoding": "gzip",
-      "content-length": "999",
+      "content-encoding": "br",
+      "content-length": "compressed-length",
+      "transfer-encoding": "chunked",
     }, [
       "__session=one; Domain=noir-urbano.vercel.app; Path=/; Secure; HttpOnly; SameSite=Lax",
       "__client=two; Domain=noir-urbano.vercel.app; Path=/; Secure; HttpOnly; SameSite=None",
@@ -350,8 +355,12 @@ test("proxy preserva múltiples Set-Cookie separados y atributos de seguridad", 
       "__client=two; Domain=noir-urbano.vercel.app; Path=/; Secure; HttpOnly; SameSite=None",
     ]);
     assert.equal(res.headers.location, "/continue");
-    assert.equal(res.headers["content-encoding"], "gzip");
+    assert.equal(res.headers["content-type"], "application/json");
+    assert.equal(res.headers["cache-control"], "private, max-age=0");
+    assert.equal(res.headers["content-encoding"], undefined);
     assert.equal(res.headers["content-length"], undefined);
+    assert.equal(res.headers["transfer-encoding"], undefined);
+    assert.equal(res.payload.toString(), "{}");
     assert.equal(res.headers["set-cookie"].join(",").includes("__client=two"), true);
   } finally {
     global.fetch = originalFetch;
@@ -404,6 +413,67 @@ test("proxy preserva body y Cookie en sign_ins y attempt_first_factor", async ()
       { url: "https://frontend-api.clerk.dev/v1/client/sign_ins?__clerk_api_version=X", method: "POST", body: "sign-in-body", cookie: "__session=opaque" },
       { url: "https://frontend-api.clerk.dev/v1/client/attempt_first_factor?__clerk_js_version=Y", method: "POST", body: "factor-body", cookie: "__session=opaque" },
     ]);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("proxy elimina Content-Encoding, Content-Length y Transfer-Encoding para br, gzip y deflate", async () => {
+  configureProxy();
+  const originalFetch = global.fetch;
+  const encodings = ["br", "gzip", "deflate"];
+  let callCount = 0;
+  global.fetch = async (_url, options) => ({
+    status: 200 + callCount++,
+    headers: upstreamHeaders({
+      "content-type": "application/json",
+      "content-encoding": encodings.shift(),
+      "content-length": "compressed-value",
+      "transfer-encoding": "chunked",
+    }),
+    arrayBuffer: async () => Buffer.from('{"response":"ok"}'),
+  });
+  try {
+    for (const [index, encoding] of ["br", "gzip", "deflate"].entries()) {
+      const res = createRes();
+      await proxyHandler(createReq("POST", "/__clerk/v1/client/sign_ins", "sign-in-body"), res);
+      assert.equal(res.statusCode, 200 + index);
+      assert.equal(res.headers["content-type"], "application/json");
+      assert.equal(res.headers["content-encoding"], undefined);
+      assert.equal(res.headers["content-length"], undefined);
+      assert.equal(res.headers["transfer-encoding"], undefined);
+      assert.equal(res.payload.toString(), '{"response":"ok"}');
+    }
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("proxy conserva status y cuerpo JSON seguro en respuestas 4xx y 5xx", async () => {
+  configureProxy();
+  const originalFetch = global.fetch;
+  const responses = [
+    { status: 422, body: '{"errors":[{"message":"invalid"}]}' },
+    { status: 503, body: '{"errors":[{"message":"unavailable"}]}' },
+  ];
+  global.fetch = async () => {
+    const response = responses.shift();
+    return {
+      status: response.status,
+      headers: upstreamHeaders({ "content-type": "application/json", "content-encoding": "gzip", "content-length": "999" }),
+      arrayBuffer: async () => Buffer.from(response.body),
+    };
+  };
+  try {
+    for (const expected of [422, 503]) {
+      const res = createRes();
+      await proxyHandler(createReq("POST", "/__clerk/v1/client/sign_ins", "sign-in-body"), res);
+      assert.equal(res.statusCode, expected);
+      assert.equal(res.headers["content-type"], "application/json");
+      assert.equal(res.headers["content-encoding"], undefined);
+      assert.equal(res.headers["content-length"], undefined);
+      assert.match(res.payload.toString(), /^\{"errors":/);
+    }
   } finally {
     global.fetch = originalFetch;
   }
