@@ -10,23 +10,6 @@ function sendJson(res, statusCode, payload) {
   res.end(JSON.stringify(payload));
 }
 
-function getFrontendApiUrl() {
-  const value = String(process.env.CLERK_FRONTEND_API_URL || "").trim();
-  if (!value) return undefined;
-  let url;
-  try {
-    url = new URL(value);
-  } catch {
-    return undefined;
-  }
-  const proxyUrl = getProxyUrl();
-  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) return undefined;
-  if (url.pathname !== "/" || url.port) return undefined;
-  if (!OFFICIAL_FAPI_HOSTS.has(url.hostname) && !url.hostname.endsWith(".clerk.accounts.dev")) return undefined;
-  if (url.hostname === "noir-urbano.vercel.app" || (proxyUrl && url.origin === proxyUrl.origin)) return undefined;
-  return url;
-}
-
 function getProxyUrl() {
   const value = String(process.env.CLERK_PROXY_URL || DEFAULT_PROXY_URL).trim();
   try {
@@ -38,9 +21,25 @@ function getProxyUrl() {
   }
 }
 
+function getFrontendApiUrl() {
+  const value = String(process.env.CLERK_FRONTEND_API_URL || "").trim();
+  if (!value) return undefined;
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return undefined;
+  }
+  const proxyUrl = getProxyUrl();
+  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || url.pathname !== "/" || url.port) return undefined;
+  if (!OFFICIAL_FAPI_HOSTS.has(url.hostname) && !url.hostname.endsWith(".clerk.accounts.dev")) return undefined;
+  if (url.hostname === "noir-urbano.vercel.app" || (proxyUrl && url.origin === proxyUrl.origin)) return undefined;
+  return url;
+}
+
 function getProxyPath(req) {
   const pathname = new URL(req.url, "https://noir-urbano.vercel.app").pathname;
-  const prefixes = ["/__clerk", "/api/__clerk"];
+  const prefixes = ["/__clerk", "/api/clerk-proxy"];
   const prefix = prefixes.find((candidate) => pathname === candidate || pathname.startsWith(`${candidate}/`));
   return prefix ? pathname.slice(prefix.length) || "/" : "/";
 }
@@ -52,8 +51,6 @@ function getForwardHeaders(req) {
     const value = Array.isArray(rawValue) ? rawValue.join(", ") : rawValue;
     if (!blocked.has(name.toLowerCase()) && typeof value === "string" && value) headers.set(name, value);
   }
-  const forwardedFor = req.headers?.["x-forwarded-for"];
-  if (typeof forwardedFor === "string" && forwardedFor) headers.set("x-forwarded-for", forwardedFor);
   return headers;
 }
 
@@ -97,8 +94,6 @@ module.exports = async function handler(req, res) {
   const headers = getForwardHeaders(req);
   headers.set("clerk-proxy-url", proxyUrl.toString());
   headers.set("clerk-secret-key", secretKey);
-  headers.delete("host");
-  headers.delete("content-length");
 
   try {
     const upstream = await fetch(upstreamUrl, {
@@ -107,13 +102,17 @@ module.exports = async function handler(req, res) {
       body,
       redirect: "manual",
     });
-    const responseBody = await upstream.arrayBuffer();
     res.statusCode = upstream.status;
     res.setHeader("Cache-Control", "no-store");
     for (const name of ["content-type", "location", "www-authenticate", "retry-after", "set-cookie"]) {
       const value = upstream.headers.get(name);
       if (value) res.setHeader(name, value);
     }
+    if (req.method === "HEAD") {
+      res.end();
+      return;
+    }
+    const responseBody = await upstream.arrayBuffer();
     res.end(Buffer.from(responseBody));
   } catch {
     sendJson(res, 502, { error: "No se pudo conectar con el proveedor de autenticación." });

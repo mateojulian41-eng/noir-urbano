@@ -8,7 +8,7 @@
     "dev": "node server.js",
     "test": "node --test tests",
     "smoke:db": "node scripts/db-smoke-test.js",
-    "check": "node --check script.js && node --check server.js && node --check api/wompi-checkout.js && node --check api/wompi-transaction.js && node --check api/wompi-webhook.js && node --check api/order-status.js && node --check api/admin-auth.js && node --check api/admin-config.js && node --check api/admin-orders.js && node --check api/admin/orders.js && node --check api/admin/order.js && node --check api/admin/order-status.js && node --check api/__clerk/[...path].js && node --check domain/orders/order-access.js && node --check domain/orders/order-runtime.js && node --check domain/orders/order-service.js && node --check repositories/memory-order-repository.js && node --check repositories/postgres-order-repository.js && node --check scripts/db-smoke-test.js"
+    "check": "node --check script.js && node --check server.js && node --check api/wompi-checkout.js && node --check api/wompi-transaction.js && node --check api/wompi-webhook.js && node --check api/order-status.js && node --check api/admin-auth.js && node --check api/admin-config.js && node --check api/admin-orders.js && node --check api/admin/orders.js && node --check api/admin/order.js && node --check api/admin/order-status.js && node --check api/clerk-proxy.js && node --check domain/orders/order-access.js && node --check domain/orders/order-runtime.js && node --check domain/orders/order-service.js && node --check repositories/memory-order-repository.js && node --check repositories/postgres-order-repository.js && node --check scripts/db-smoke-test.js"
   },
   "engines": {
     "node": ">=18"

@@ -76,6 +76,7 @@ test("admin-config solo devuelve publishableKey", async () => {
 
 test("rewrite limpia /admin hacia admin.html y no usa catch-all", () => {
   assert.ok(vercel.rewrites.some((rewrite) => rewrite.source === "/admin" && rewrite.destination === "/admin.html"));
-  assert.ok(vercel.rewrites.some((rewrite) => rewrite.source === "/__clerk/:path*" && rewrite.destination === "/api/__clerk/:path*"));
+  assert.ok(vercel.rewrites.some((rewrite) => rewrite.source === "/__clerk" && rewrite.destination === "/api/clerk-proxy"));
+  assert.ok(vercel.rewrites.some((rewrite) => rewrite.source === "/__clerk/:path*" && rewrite.destination === "/api/clerk-proxy"));
   assert.equal(JSON.stringify(vercel).includes("catch-all"), false);
 });
