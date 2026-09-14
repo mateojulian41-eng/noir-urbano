@@ -1,6 +1,7 @@
 const ALLOWED_METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 const DEFAULT_PROXY_URL = "https://noir-urbano.vercel.app/__clerk";
+const OFFICIAL_FAPI_HOSTS = new Set(["frontend-api.clerk.dev", "frontend-api.clerk.com"]);
 
 function sendJson(res, statusCode, payload) {
   res.statusCode = statusCode;
@@ -12,10 +13,29 @@ function sendJson(res, statusCode, payload) {
 function getFrontendApiUrl() {
   const value = String(process.env.CLERK_FRONTEND_API_URL || "").trim();
   if (!value) return undefined;
-  const url = new URL(value);
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return undefined;
+  }
+  const proxyUrl = getProxyUrl();
   if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) return undefined;
-  if (!/(^|\.)clerk\.(accounts\.dev|com)$/.test(url.hostname)) return undefined;
+  if (url.pathname !== "/" || url.port) return undefined;
+  if (!OFFICIAL_FAPI_HOSTS.has(url.hostname) && !url.hostname.endsWith(".clerk.accounts.dev")) return undefined;
+  if (url.hostname === "noir-urbano.vercel.app" || (proxyUrl && url.origin === proxyUrl.origin)) return undefined;
   return url;
+}
+
+function getProxyUrl() {
+  const value = String(process.env.CLERK_PROXY_URL || DEFAULT_PROXY_URL).trim();
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.hostname !== "noir-urbano.vercel.app" || url.pathname !== "/__clerk" || url.search || url.hash || url.username || url.password) return undefined;
+    return url;
+  } catch {
+    return undefined;
+  }
 }
 
 function getProxyPath(req) {
@@ -56,8 +76,9 @@ module.exports = async function handler(req, res) {
     return;
   }
   const frontendApiUrl = getFrontendApiUrl();
+  const proxyUrl = getProxyUrl();
   const secretKey = String(process.env.CLERK_SECRET_KEY || "").trim();
-  if (!frontendApiUrl || !secretKey) {
+  if (!frontendApiUrl || !proxyUrl || !secretKey) {
     sendJson(res, 503, { error: "Proxy de autenticación no disponible." });
     return;
   }
@@ -74,7 +95,7 @@ module.exports = async function handler(req, res) {
   const upstreamUrl = new URL(getProxyPath(req), frontendApiUrl);
   upstreamUrl.search = incomingUrl.search;
   const headers = getForwardHeaders(req);
-  headers.set("clerk-proxy-url", String(process.env.CLERK_PROXY_URL || DEFAULT_PROXY_URL));
+  headers.set("clerk-proxy-url", proxyUrl.toString());
   headers.set("clerk-secret-key", secretKey);
   headers.delete("host");
   headers.delete("content-length");
@@ -100,5 +121,6 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.getFrontendApiUrl = getFrontendApiUrl;
+module.exports.getProxyUrl = getProxyUrl;
 module.exports.getProxyPath = getProxyPath;
 module.exports.MAX_BODY_BYTES = MAX_BODY_BYTES;

@@ -22,7 +22,7 @@ function createRes() {
 }
 
 function configureProxy() {
-  process.env.CLERK_FRONTEND_API_URL = "https://frontend.clerk.accounts.dev";
+  process.env.CLERK_FRONTEND_API_URL = "https://frontend-api.clerk.dev";
   process.env.CLERK_PROXY_URL = "https://noir-urbano.vercel.app/__clerk";
   process.env.CLERK_SECRET_KEY = "test-secret-not-output";
 }
@@ -41,7 +41,7 @@ test("proxy Clerk elimina prefijo, conserva query, método, cuerpo y forwarded-f
       "content-type": "application/json",
       "x-forwarded-for": "203.0.113.10, 10.0.0.1",
     }), res);
-    assert.equal(request.url, "https://frontend.clerk.accounts.dev/v1/client?foo=bar");
+    assert.equal(request.url, "https://frontend-api.clerk.dev/v1/client?foo=bar");
     assert.equal(request.options.method, "POST");
     assert.equal(request.options.headers.get("x-forwarded-for"), "203.0.113.10, 10.0.0.1");
     assert.equal(request.options.headers.get("clerk-proxy-url"), "https://noir-urbano.vercel.app/__clerk");
@@ -116,4 +116,25 @@ test("proxy y rewrite no afectan las rutas API existentes", () => {
     { source: "/__clerk/:path*", destination: "/api/__clerk/:path*" },
   ]);
   assert.equal(JSON.stringify(vercel).includes("/api/:path*"), false);
+});
+
+test("proxy Clerk rechaza upstream igual al proxy, bajo noir-urbano o no HTTPS", async () => {
+  configureProxy();
+  const originalFetch = global.fetch;
+  global.fetch = async () => { throw new Error("must not call upstream"); };
+  const candidates = [
+    "https://noir-urbano.vercel.app/__clerk",
+    "https://noir-urbano.vercel.app",
+    "http://frontend-api.clerk.dev",
+  ];
+  try {
+    for (const candidate of candidates) {
+      process.env.CLERK_FRONTEND_API_URL = candidate;
+      const res = createRes();
+      await proxyHandler(createReq("GET", "/__clerk/client"), res);
+      assert.equal(res.statusCode, 503);
+    }
+  } finally {
+    global.fetch = originalFetch;
+  }
 });
