@@ -57,10 +57,23 @@ function getConfiguration(env = process.env) {
 }
 
 function getProxyPath(req) {
-  const pathname = new URL(req.url, "https://noir-urbano.vercel.app").pathname;
+  const requestUrl = new URL(req.url, "https://noir-urbano.vercel.app");
+  const internalPath = requestUrl.searchParams.get("clerk_proxy_path");
+  if (internalPath !== null) {
+    const normalizedPath = `/${internalPath.replace(/^\/+/, "")}`;
+    return normalizedPath === "/" ? "/" : normalizedPath;
+  }
+  const pathname = requestUrl.pathname;
   const prefixes = ["/__clerk", "/api/clerk-proxy"];
   const prefix = prefixes.find((candidate) => pathname === candidate || pathname.startsWith(`${candidate}/`));
   return prefix ? pathname.slice(prefix.length) || "/" : "/";
+}
+
+function getUpstreamQuery(req) {
+  const requestUrl = new URL(req.url, "https://noir-urbano.vercel.app");
+  requestUrl.searchParams.delete("clerk_proxy_path");
+  requestUrl.searchParams.delete("path");
+  return requestUrl.search;
 }
 
 function getForwardHeaders(req) {
@@ -111,9 +124,8 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const incomingUrl = new URL(req.url, "https://noir-urbano.vercel.app");
   const upstreamUrl = new URL(getProxyPath(req), configuration.upstreamUrl);
-  upstreamUrl.search = incomingUrl.search;
+  upstreamUrl.search = getUpstreamQuery(req);
   const headers = getForwardHeaders(req);
   headers.set("clerk-proxy-url", configuration.proxyUrl.toString());
   headers.set("clerk-secret-key", configuration.secretValue);
@@ -145,4 +157,5 @@ module.exports = async function handler(req, res) {
 module.exports.getConfiguration = getConfiguration;
 module.exports.normalizeUrl = normalizeUrl;
 module.exports.getProxyPath = getProxyPath;
+module.exports.getUpstreamQuery = getUpstreamQuery;
 module.exports.MAX_BODY_BYTES = MAX_BODY_BYTES;

@@ -195,7 +195,7 @@ test("proxy y rewrite no afectan las rutas API existentes", () => {
   assert.deepEqual(vercel.rewrites, [
     { source: "/admin", destination: "/admin.html" },
     { source: "/__clerk", destination: "/api/clerk-proxy" },
-    { source: "/__clerk/:path*", destination: "/api/clerk-proxy" },
+    { source: "/__clerk/:path*", destination: "/api/clerk-proxy?clerk_proxy_path=:path*" },
   ]);
   assert.equal(JSON.stringify(vercel).includes("/api/:path*"), false);
 });
@@ -268,6 +268,51 @@ test("proxy Clerk reenvía HEAD sin cuerpo y OPTIONS sin CORS permisivo", async 
     assert.deepEqual(methods.map(({ method, body }) => ({ method, body })), [
       { method: "HEAD", body: undefined },
       { method: "OPTIONS", body: undefined },
+    ]);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("proxy elimina path y clerk_proxy_path de la query generada por rewrite", async () => {
+  configureProxy();
+  const originalFetch = global.fetch;
+  let request;
+  global.fetch = async (url, options) => {
+    request = { url: String(url), options };
+    return { status: 200, headers: new Headers(), arrayBuffer: async () => Buffer.from("ok") };
+  };
+  try {
+    await proxyHandler(createReq(
+      "POST",
+      "/api/clerk-proxy?clerk_proxy_path=v1/client/sign_ins&path=v1/client/sign_ins&__clerk_api_version=X&__clerk_js_version=Y&foo=bar",
+      "form-body",
+      { "content-type": "application/x-www-form-urlencoded" },
+    ), createRes());
+    assert.equal(request.url, "https://frontend-api.clerk.dev/v1/client/sign_ins?__clerk_api_version=X&__clerk_js_version=Y&foo=bar");
+    assert.equal(request.url.includes("path="), false);
+    assert.equal(request.url.includes("clerk_proxy_path="), false);
+    assert.equal(request.options.method, "POST");
+    assert.equal(request.options.body.toString(), "form-body");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("proxy conserva query legítima en environment y proxy-health", async () => {
+  configureProxy();
+  const originalFetch = global.fetch;
+  const urls = [];
+  global.fetch = async (url) => {
+    urls.push(String(url));
+    return { status: 200, headers: new Headers(), arrayBuffer: async () => Buffer.from("ok") };
+  };
+  try {
+    await proxyHandler(createReq("GET", "/api/clerk-proxy?clerk_proxy_path=v1/environment&path=v1/environment&__clerk_api_version=X&__clerk_js_version=Y"), createRes());
+    await proxyHandler(createReq("GET", "/api/clerk-proxy?clerk_proxy_path=v1/proxy-health&__clerk_api_version=X"), createRes());
+    assert.deepEqual(urls, [
+      "https://frontend-api.clerk.dev/v1/environment?__clerk_api_version=X&__clerk_js_version=Y",
+      "https://frontend-api.clerk.dev/v1/proxy-health?__clerk_api_version=X",
     ]);
   } finally {
     global.fetch = originalFetch;
