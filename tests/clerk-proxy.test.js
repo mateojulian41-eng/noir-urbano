@@ -1,7 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const { PassThrough } = require("node:stream");
-const proxyHandler = require("../api/__clerk/[...path]");
+const proxyHandler = require("../api/clerk-proxy");
 
 function createReq(method, url, body = "", headers = {}) {
   const req = new PassThrough();
@@ -113,7 +115,8 @@ test("proxy y rewrite no afectan las rutas API existentes", () => {
   const vercel = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8"));
   assert.deepEqual(vercel.rewrites, [
     { source: "/admin", destination: "/admin.html" },
-    { source: "/__clerk/:path*", destination: "/api/__clerk/:path*" },
+    { source: "/__clerk", destination: "/api/clerk-proxy" },
+    { source: "/__clerk/:path*", destination: "/api/clerk-proxy" },
   ]);
   assert.equal(JSON.stringify(vercel).includes("/api/:path*"), false);
 });
@@ -134,6 +137,59 @@ test("proxy Clerk rechaza upstream igual al proxy, bajo noir-urbano o no HTTPS",
       await proxyHandler(createReq("GET", "/__clerk/client"), res);
       assert.equal(res.statusCode, 503);
     }
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("proxy Clerk resuelve raíz, slash, varios segmentos y la función estática", async () => {
+  configureProxy();
+  const originalFetch = global.fetch;
+  const urls = [];
+  global.fetch = async (url) => {
+    urls.push(String(url));
+    return { status: 200, headers: new Headers(), arrayBuffer: async () => Buffer.from("ok") };
+  };
+  try {
+    for (const requestPath of ["/__clerk", "/__clerk/", "/__clerk/v1/environment", "/__clerk/v1/client/sessions/current"]) {
+      await proxyHandler(createReq("GET", requestPath), createRes());
+    }
+    await proxyHandler(createReq("GET", "/api/clerk-proxy/v1/environment"), createRes());
+    assert.deepEqual(urls, [
+      "https://frontend-api.clerk.dev/",
+      "https://frontend-api.clerk.dev/",
+      "https://frontend-api.clerk.dev/v1/environment",
+      "https://frontend-api.clerk.dev/v1/client/sessions/current",
+      "https://frontend-api.clerk.dev/v1/environment",
+    ]);
+    assert.equal(fs.existsSync(path.join(__dirname, "..", "api", "__clerk", "[...path].js")), false);
+    assert.equal(fs.existsSync(path.join(__dirname, "..", "api", "clerk-proxy.js")), true);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("proxy Clerk reenvía HEAD sin cuerpo y OPTIONS sin CORS permisivo", async () => {
+  configureProxy();
+  const originalFetch = global.fetch;
+  const methods = [];
+  global.fetch = async (url, options) => {
+    methods.push({ url: String(url), method: options.method, body: options.body });
+    return { status: 204, headers: new Headers({ "access-control-allow-origin": "https://noir-urbano.vercel.app" }), arrayBuffer: async () => Buffer.from("not returned") };
+  };
+  try {
+    const headRes = createRes();
+    await proxyHandler(createReq("HEAD", "/__clerk/v1/environment"), headRes);
+    assert.equal(headRes.statusCode, 204);
+    assert.equal(headRes.payload, undefined);
+    const optionsRes = createRes();
+    await proxyHandler(createReq("OPTIONS", "/__clerk/v1/environment"), optionsRes);
+    assert.equal(optionsRes.statusCode, 204);
+    assert.equal(optionsRes.headers["access-control-allow-origin"], undefined);
+    assert.deepEqual(methods.map(({ method, body }) => ({ method, body })), [
+      { method: "HEAD", body: undefined },
+      { method: "OPTIONS", body: undefined },
+    ]);
   } finally {
     global.fetch = originalFetch;
   }
