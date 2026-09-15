@@ -1,4 +1,3 @@
-del proyecto:
 # NOIR URBANO
 
 ## Descripción
