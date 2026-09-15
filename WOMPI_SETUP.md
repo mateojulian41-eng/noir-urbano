@@ -1,60 +1,43 @@
-# Integracion Wompi - NOIR URBANO
+# Integracion Wompi Sandbox - NOIR URBANO
 
-La web ya tiene el frontend preparado para crear una transaccion firmada y
-redirigir al checkout seguro de Wompi desde el boton `FINALIZAR COMPRA`.
-El proyecto esta configurado para sandbox usando `.env`.
+La integración de Wompi está configurada exclusivamente para Sandbox. No se
+procesan pagos reales y este documento no autoriza ni describe una activación
+de Production.
 
-## Correr local
+## Ejecución local
 
 ```bash
+npm.cmd install
 node server.js
 ```
 
-Abrir:
+Abrir `http://127.0.0.1:4173/`. No uses un servidor estático simple para
+probar el checkout: se necesita `/api/wompi-checkout` para crear la firma de
+integridad en el servidor.
 
-```text
-http://127.0.0.1:4173/
-```
+## Variables de Sandbox
 
-No usen un servidor estatico simple para probar Wompi, porque se necesita el
-endpoint `/api/wompi-checkout` para crear la firma de integridad.
+Usa `.env.example` como referencia y crea `.env` localmente. Completa los
+valores de Sandbox únicamente en tu entorno local o de despliegue controlado.
+Nunca publiques `.env`, llaves, secretos ni valores de prueba con apariencia
+real.
 
-## Lo que falta para activar pagos reales
+## Flujo implementado
 
-1. Entrar al dashboard de Wompi.
-2. Ir a la seccion de desarrolladores / llaves.
-3. Copiar las llaves de produccion.
-4. Cambiar `WOMPI_ENV=production`.
-5. Configurar estas variables en el hosting:
+- `/api/wompi-checkout`: valida productos, calcula el total, genera la
+  referencia y firma la integridad antes de crear el checkout.
+- `/api/wompi-transaction?id=...`: consulta una transacción con la llave
+  privada del servidor.
+- `/api/wompi-webhook`: recibe eventos y valida el checksum con el secreto de
+  eventos.
 
-```bash
-WOMPI_ENV=production
-WOMPI_PUBLIC_KEY=pub_prod_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-WOMPI_PRIVATE_KEY=prv_prod_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-WOMPI_EVENTS_SECRET=prod_events_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-WOMPI_INTEGRITY_SECRET=prod_integrity_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-WOMPI_REDIRECT_URL=https://tudominio.com/?pago=wompi
-```
+El secreto de integridad, la llave privada y el secreto de eventos permanecen
+del lado del servidor. La aplicación valida montos y moneda antes de actualizar
+un pedido.
 
-## Seguridad
+## Despliegue
 
-El secreto de integridad nunca debe ponerse en `index.html`, `script.js` ni en
-ningun archivo que vea el navegador. Por eso el archivo
-`api/wompi-checkout.js` calcula la firma en servidor.
-
-La llave privada y el secreto de eventos tambien deben vivir solo en servidor.
-El archivo `.env` esta en `.gitignore` y no se debe subir al repositorio.
-
-## Flujo actual
-
-- `/api/wompi-checkout`: valida productos, calcula total, genera referencia,
-  firma de integridad y URL segura de checkout Wompi.
-- `/api/wompi-transaction?id=...`: consulta una transaccion usando la llave
-  privada.
-- `/api/wompi-webhook`: recibe eventos de Wompi y verifica el checksum con el
-  secreto de eventos.
-
-## Recomendacion de despliegue
-
-Para usar `api/wompi-checkout.js` sin cambiar mucho el proyecto, desplieguen en
-Vercel o en un hosting que soporte funciones Node.js serverless.
+La aplicación puede desplegarse en Vercel con funciones Node.js serverless,
+manteniendo Wompi en Sandbox. Las migraciones de base de datos se aplican
+manualmente y deben revisarse antes de cualquier entorno compartido. No se
+deben ejecutar migraciones a ciegas contra Production.
